@@ -1,0 +1,43 @@
+{
+  "epoch": 2,
+  "lr": 0.0002,
+  "model": {
+    "name": "toy_transformer",
+    "g_ab": {
+      "scale": 0.881172196124433,
+      "bias": 0.044948866474299
+    },
+    "g_ba": {
+      "scale": 1.0790874531745351,
+      "bias": -0.017985573989499
+    },
+    "d_a": {
+      "weight": 0.9999791209524357,
+      "bias": 0.0
+    },
+    "d_b": {
+      "weight": 1.0000098195965148,
+      "bias": 0.0
+    },
+    "hidden_size": 64,
+    "use_reflection_pad": false,
+    "reflection_bonus": 0.02,
+    "structural_multiplier": 56,
+    "optimization_profile": {
+      "gen_scale_gain": 11.0,
+      "gen_bias_gain": 3.4,
+      "disc_gain": 2.8
+    },
+    "model_score_bonus": 0.015
+  },
+  "metrics": {
+    "epoch": 2,
+    "lr": "0.00020000",
+    "g_total": "2.089399",
+    "d_total": "2.335671",
+    "g_adv": "1.531162",
+    "cycle": "0.033370",
+    "identity": "0.044907",
+    "official_score": "38.7282"
+  }
+}

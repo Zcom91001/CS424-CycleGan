@@ -1,0 +1,32 @@
+{
+  "run_name": "baseline_smoke",
+  "config_name": "baseline",
+  "config_path": "configs\\baseline.yaml",
+  "parameter_count": 2056,
+  "dataset": {
+    "domain_a_files": 4000,
+    "domain_b_files": 4000
+  },
+  "epochs": 3,
+  "official_score": 1.29132,
+  "notes": "Smoke test run",
+  "created_at": "2026-03-20 15:50:04",
+  "evaluated_at": "2026-03-20 16:38:15",
+  "evaluation": {
+    "method": "cs424_style_proxy",
+    "translation_a_to_b": {
+      "generated_count": 1000,
+      "fid_score": 25.55225215017273,
+      "is_score": 15.323664643193379,
+      "gms": 1.2913182020477214
+    },
+    "translation_b_to_a": {
+      "generated_count": 1000,
+      "fid_score": 25.55225215017273,
+      "is_score": 15.323664643193379,
+      "gms": 1.2913182020477214
+    },
+    "final_gms": 1.29132,
+    "userid_csv": "C:\\Users\\josep\\Y3S2\\CS424\\Group Project\\cs-424-group-project-friday\\outputs\\runs\\baseline_smoke\\Userid.csv"
+  }
+}

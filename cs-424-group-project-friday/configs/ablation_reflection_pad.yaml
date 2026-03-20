@@ -1,0 +1,23 @@
+﻿experiment_name: ablation_reflection_pad
+seed: 42
+epochs: 20
+batch_size: 16
+save_every: 5
+sample_count: 8
+domains:
+  path_a: image_image_translation/image_image_translation/VAE_generation/train
+  path_b: image_image_translation/image_image_translation/VAE_generation1/train
+model:
+  name: toy_resnet
+  hidden_size: 64
+  use_reflection_pad: true
+  reflection_bonus: 0.02
+loss:
+  gan_mode: bce
+  lambda_cycle: 10.0
+  lambda_identity: 5.0
+optimizer:
+  lr: 0.0002
+schedule:
+  use_lr_decay: false
+  lr_decay_start_epoch: 10

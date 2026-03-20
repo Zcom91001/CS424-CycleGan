@@ -1,0 +1,2 @@
+epoch,lr,g_total,d_total,g_adv,cycle,identity,official_score
+1,0.00020000,1.568050,2.169857,0.771802,0.040955,0.077340,46.5384

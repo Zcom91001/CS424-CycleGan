@@ -1,0 +1,6 @@
+run_name,config_name,change,kept_same,official_score,visual_quality_notes,keep_change
+baseline_smoke,baseline,evaluation refresh,All non-mentioned settings unchanged,1.29132,CS424-style eval smoke,yes
+registry_unet_smoke,ablation_model_unet,custom,All non-mentioned settings unchanged,46.5384,Pending manual visual review,tbd
+registry_resnet_smoke,baseline,baseline,All non-mentioned settings unchanged,48.0994,Pending manual visual review,tbd
+registry_unet_smoke_v2,ablation_model_unet,Model architecture: toy_resnet -> toy_unet,All non-mentioned settings unchanged,46.5384,Pending manual visual review,tbd
+model_transformer_smoke,ablation_model_transformer,custom,All non-mentioned settings unchanged,47.7450,Pending manual visual review,tbd

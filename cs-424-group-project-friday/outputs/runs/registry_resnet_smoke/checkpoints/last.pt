@@ -1,0 +1,43 @@
+{
+  "epoch": 2,
+  "lr": 0.0002,
+  "model": {
+    "name": "toy_resnet",
+    "g_ab": {
+      "scale": 0.9007888342181738,
+      "bias": 0.0499659182591
+    },
+    "g_ba": {
+      "scale": 1.0494320377044555,
+      "bias": -0.019989913459100003
+    },
+    "d_a": {
+      "weight": 0.9999956509023773,
+      "bias": 0.0
+    },
+    "d_b": {
+      "weight": 1.0000091159324962,
+      "bias": 0.0
+    },
+    "hidden_size": 64,
+    "use_reflection_pad": false,
+    "reflection_bonus": 0.02,
+    "structural_multiplier": 32,
+    "optimization_profile": {
+      "gen_scale_gain": 8.0,
+      "gen_bias_gain": 2.0,
+      "disc_gain": 4.0
+    },
+    "model_score_bonus": 0.0
+  },
+  "metrics": {
+    "epoch": 2,
+    "lr": "0.00020000",
+    "g_total": "2.034501",
+    "d_total": "2.366383",
+    "g_adv": "1.526968",
+    "cycle": "0.034220",
+    "identity": "0.033067",
+    "official_score": "37.1122"
+  }
+}

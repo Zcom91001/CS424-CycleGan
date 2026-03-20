@@ -1,0 +1,33 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Dataset (do not commit raw data)
+image_image_translation/
+
+# Generated outputs / run artifacts
+outputs/
+generated_A_images/
+generated_B_images/
+
+# Submission/evaluation artifacts
+user_id.csv
+Userid.csv
+
+# Large model/checkpoint artifacts
+*.pt
+*.pth
+*.ckpt

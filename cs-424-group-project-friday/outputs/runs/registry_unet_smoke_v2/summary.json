@@ -1,0 +1,15 @@
+{
+  "run_name": "registry_unet_smoke_v2",
+  "config_name": "ablation_model_unet",
+  "config_path": "configs\\ablation_model_unet.yaml",
+  "model_name": "toy_unet",
+  "parameter_count": 2568,
+  "dataset": {
+    "domain_a_files": 4000,
+    "domain_b_files": 4000
+  },
+  "epochs": 1,
+  "official_score": 46.5384,
+  "notes": "Registry smoke unet v2",
+  "created_at": "2026-03-20 16:19:10"
+}
