@@ -32,6 +32,8 @@ random.seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+data_dir = r'C:\Users\dan_t\OneDrive\Desktop\CS424'
+
 """## 2. Define your model"""
 
 """
@@ -241,53 +243,6 @@ class Discriminator(nn.Module):
         return x
 
 
-"""
-Step 3. Define Loss
-"""
-criterion_GAN = nn.BCELoss()
-criterion_cycle = nn.L1Loss()
-criterion_identity = nn.L1Loss()
-
-"""
-Step 4. Initalize G and D¶
-"""
-G_AB = Generator(3)
-D_B = Discriminator(3)
-G_BA = Generator(3)
-D_A = Discriminator(3)
-
-## Total parameters in CycleGAN should be less than 60M
-total_params = sum(p.numel() for p in G_AB.parameters()) + \
-               sum(p.numel() for p in G_BA.parameters()) + \
-               sum(p.numel() for p in D_A.parameters()) + \
-               sum(p.numel() for p in D_B.parameters())
-
-
-"""
-# modification of parameters computation is forbidden
-"""
-total_params_million = total_params / (1024 * 1024)
-print(f'Total parameters in CycleGAN model: {total_params_million:.2f} million')
-
-cuda = torch.cuda.is_available()
-print(f'cuda: {cuda}')
-if cuda:
-    G_AB = G_AB.cuda()
-    D_B = D_B.cuda()
-    G_BA = G_BA.cuda()
-    D_A = D_A.cuda()
-    criterion_GAN = criterion_GAN.cuda()
-    criterion_cycle = criterion_cycle.cuda()
-    criterion_identity = criterion_identity.cuda()
-
-"""
-Step 5. Configure Optimizers
-"""
-lr = 0.0002
-optimizer_G = torch.optim.Adam(itertools.chain(G_AB.parameters(), G_BA.parameters()), lr=lr)
-optimizer_D_A = torch.optim.Adam(D_A.parameters(), lr=lr)
-optimizer_D_B = torch.optim.Adam(D_B.parameters(), lr=lr)
-
 """## 3. Load the data"""
 
 """
@@ -323,227 +278,280 @@ class ImageDataset(Dataset):
 
         return img_A, img_B
 
-data_dir = r'C:\Users\dan_t\OneDrive\Desktop\CS424'
-
-image_size = (256, 256)
-transforms_ = transforms.Compose([
-    transforms.Resize(image_size),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
-
-batch_size = 5
-
-trainloader = DataLoader(
-    ImageDataset(data_dir, mode='train', transforms=transforms_),
-    batch_size = batch_size,
-    shuffle = True
-)
-
-validloader = DataLoader(
-    ImageDataset(data_dir, mode='valid', transforms=transforms_),
-    batch_size = batch_size,
-    shuffle = False
-)
-
 """## 4. Train your **model**"""
 
 """
 Step 7. Training
 """
-Tensor = torch.cuda.FloatTensor if cuda else torch.Tensor
-n_epoches = 100
+def main():
+    """
+    Step 3. Define Loss
+    """
+    criterion_GAN = nn.BCELoss()
+    criterion_cycle = nn.L1Loss()
+    criterion_identity = nn.L1Loss()
 
-for epoch in range(n_epoches):
-    for i, (real_A, real_B) in enumerate(trainloader):
-        real_A, real_B = real_A.type(Tensor), real_B.type(Tensor)
+    """
+    Step 4. Initalize G and D¶
+    """
+    G_AB = Generator(3)
+    D_B = Discriminator(3)
+    G_BA = Generator(3)
+    D_A = Discriminator(3)
 
-        # groud truth
-        pred_real_A = D_A(real_A)
-        valid_A = torch.ones_like(pred_real_A)
-        fake_A = torch.zeros_like(pred_real_A)
-        pred_real_B = D_B(real_B)
-        valid_B = torch.ones_like(pred_real_B)
-        fake_B = torch.zeros_like(pred_real_B)
+    ## Total parameters in CycleGAN should be less than 60M
+    total_params = sum(p.numel() for p in G_AB.parameters()) + \
+                sum(p.numel() for p in G_BA.parameters()) + \
+                sum(p.numel() for p in D_A.parameters()) + \
+                sum(p.numel() for p in D_B.parameters())
 
-        """Train Generators"""
-        # set to training mode in the begining, because sample_images will set it to eval mode
-        G_AB.train()
-        G_BA.train()
 
-        optimizer_G.zero_grad()
+    """
+    # modification of parameters computation is forbidden
+    """
+    total_params_million = total_params / (1024 * 1024)
+    print(f'Total parameters in CycleGAN model: {total_params_million:.2f} million')
 
-        fake_B_img = G_AB(real_A)
-        fake_A_img = G_BA(real_B)
+    cuda = torch.cuda.is_available()
+    print(f'cuda: {cuda}')
+    if cuda:
+        G_AB = G_AB.cuda()
+        D_B = D_B.cuda()
+        G_BA = G_BA.cuda()
+        D_A = D_A.cuda()
+        criterion_GAN = criterion_GAN.cuda()
+        criterion_cycle = criterion_cycle.cuda()
+        criterion_identity = criterion_identity.cuda()
 
-        # identity loss
-        loss_id_A = criterion_identity(fake_B_img, real_A)
-        loss_id_B = criterion_identity(fake_A_img, real_B)
-        loss_identity = (loss_id_A + loss_id_B) / 2
+    """
+    Step 5. Configure Optimizers
+    """
+    lr = 0.0002
+    optimizer_G = torch.optim.Adam(itertools.chain(G_AB.parameters(), G_BA.parameters()), lr=lr)
+    optimizer_D_A = torch.optim.Adam(D_A.parameters(), lr=lr)
+    optimizer_D_B = torch.optim.Adam(D_B.parameters(), lr=lr)
+    
+    # Dynamically set model_dir based on the script's filename (without extension)
+    script_name = os.path.splitext(os.path.basename(__file__))[0]
+    model_dir = os.path.join(data_dir, "models", script_name)
+    os.makedirs(model_dir, exist_ok=True)
 
-        # GAN loss, train G to make D think it's true
-        loss_GAN_AB = criterion_GAN(D_B(fake_B_img), valid_B)
-        loss_GAN_BA = criterion_GAN(D_A(fake_A_img), valid_A)
-        loss_GAN = (loss_GAN_AB + loss_GAN_BA) / 2
+    image_size = (256, 256)
+    transforms_ = transforms.Compose([
+        transforms.Resize(image_size),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
 
-        # cycle loss
-        recov_A = G_BA(fake_B_img)
-        recov_B = G_AB(fake_A_img)
-        loss_cycle_A = criterion_cycle(recov_A, real_A)
-        loss_cycle_B = criterion_cycle(recov_B, real_B)
-        loss_cycle = (loss_cycle_A + loss_cycle_B) / 2
+    batch_size = 5
 
-        # G totol loss
-        weight1 = 5
-        weight2 = 1
-        weight3 = 10
-        loss_G = weight1*loss_identity + weight2*loss_GAN + weight3*loss_cycle
+    trainloader = DataLoader(
+        ImageDataset(data_dir, mode='train', transforms=transforms_),
+        batch_size = batch_size,
+        shuffle = True
+    )
 
-        loss_G.backward()
-        optimizer_G.step()
+    validloader = DataLoader(
+        ImageDataset(data_dir, mode='valid', transforms=transforms_),
+        batch_size = batch_size,
+        shuffle = False
+    )
+    Tensor = torch.cuda.FloatTensor if cuda else torch.Tensor
+    n_epoches = 1
 
-        """Train Discriminator A"""
-        optimizer_D_A.zero_grad()
+    for epoch in range(n_epoches):
+        for i, (real_A, real_B) in enumerate(trainloader):
+            real_A, real_B = real_A.type(Tensor), real_B.type(Tensor)
 
-        loss_real = criterion_GAN(pred_real_A, valid_A)
-        loss_fake = criterion_GAN(D_A(fake_A_img.detach()), fake_A)
-        loss_D_A = (loss_real + loss_fake) / 2
+            # groud truth
+            pred_real_A = D_A(real_A)
+            valid_A = torch.ones_like(pred_real_A)
+            fake_A = torch.zeros_like(pred_real_A)
+            pred_real_B = D_B(real_B)
+            valid_B = torch.ones_like(pred_real_B)
+            fake_B = torch.zeros_like(pred_real_B)
 
-        loss_D_A.backward()
-        optimizer_D_A.step()
+            """Train Generators"""
+            # set to training mode in the begining, because sample_images will set it to eval mode
+            G_AB.train()
+            G_BA.train()
 
-        """Train Discriminator B"""
-        optimizer_D_B.zero_grad()
+            optimizer_G.zero_grad()
 
-        loss_real = criterion_GAN(pred_real_B, valid_B)
-        loss_fake = criterion_GAN(D_B(fake_B_img.detach()), fake_B)
-        loss_D_B = (loss_real + loss_fake) / 2
+            fake_B_img = G_AB(real_A)
+            fake_A_img = G_BA(real_B)
 
-        loss_D_B.backward()
-        optimizer_D_B.step()
+            # identity loss
+            loss_id_A = criterion_identity(fake_B_img, real_A)
+            loss_id_B = criterion_identity(fake_A_img, real_B)
+            loss_identity = (loss_id_A + loss_id_B) / 2
 
-    # validation
-    if (epoch+1) % 10 == 0:
-        valid_real_A, valid_real_B = next(iter(validloader))
-        # sample_images(valid_real_A, valid_real_B)
+            # GAN loss, train G to make D think it's true
+            loss_GAN_AB = criterion_GAN(D_B(fake_B_img), valid_B)
+            loss_GAN_BA = criterion_GAN(D_A(fake_A_img), valid_A)
+            loss_GAN = (loss_GAN_AB + loss_GAN_BA) / 2
 
-        loss_D = (loss_D_A + loss_D_B) / 2
-        print(f'[Epoch {epoch+1}/{n_epoches}]')
-        print(f'[G loss: {loss_G.item()} | identity: {loss_identity.item()} GAN: {loss_GAN.item()} cycle: {loss_cycle.item()}]')
-        print(f'[D loss: {loss_D.item()} | D_A: {loss_D_A.item()} D_B: {loss_D_B.item()}]')
+            # cycle loss
+            recov_A = G_BA(fake_B_img)
+            recov_B = G_AB(fake_A_img)
+            loss_cycle_A = criterion_cycle(recov_A, real_A)
+            loss_cycle_B = criterion_cycle(recov_B, real_B)
+            loss_cycle = (loss_cycle_A + loss_cycle_B) / 2
 
-"""## 5. Evaluation"""
+            # G totol loss
+            weight1 = 5
+            weight2 = 1
+            weight3 = 10
+            loss_G = weight1*loss_identity + weight2*loss_GAN + weight3*loss_cycle
 
-"""
-Step 8. Generate Images
-"""
-## Translation 1: A Image --> B Image
-test_dir = os.path.join(data_dir, 'VAE_generation/test') # modification forbidden
-files = [os.path.join(test_dir, name) for name in os.listdir(test_dir)]
+            loss_G.backward()
+            optimizer_G.step()
 
-save_dir = '../generated_B_images'
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
+            """Train Discriminator A"""
+            optimizer_D_A.zero_grad()
 
-to_image = transforms.ToPILImage()
+            loss_real = criterion_GAN(pred_real_A, valid_A)
+            loss_fake = criterion_GAN(D_A(fake_A_img.detach()), fake_A)
+            loss_D_A = (loss_real + loss_fake) / 2
 
-G_AB.eval()
-for i in range(0, len(files), batch_size):
-    # read images
-    imgs = []
-    for j in range(i, min(len(files), i+batch_size)):
-        img = Image.open(files[j])
-        img = transforms_(img)
-        imgs.append(img)
-    imgs = torch.stack(imgs, 0).type(Tensor)
+            loss_D_A.backward()
+            optimizer_D_A.step()
 
-    # generate
-    fake_imgs = G_AB(imgs).detach().cpu()
+            """Train Discriminator B"""
+            optimizer_D_B.zero_grad()
 
-    # save
-    for j in range(fake_imgs.size(0)):
-        img = fake_imgs[j].squeeze().permute(1, 2, 0)
-        img_arr = img.numpy()
-        img_arr = (img_arr - np.min(img_arr)) * 255 / (np.max(img_arr) - np.min(img_arr))
-        img_arr = img_arr.astype(np.uint8)
+            loss_real = criterion_GAN(pred_real_B, valid_B)
+            loss_fake = criterion_GAN(D_B(fake_B_img.detach()), fake_B)
+            loss_D_B = (loss_real + loss_fake) / 2
 
-        img = to_image(img_arr)
-        _, name = os.path.split(files[i+j])
-        img.save(os.path.join(save_dir, name))
+            loss_D_B.backward()
+            optimizer_D_B.step()
 
-gt_dir = os.path.join(data_dir, 'VAE_generation1/test')
-metrics = torch_fidelity.calculate_metrics(
-    input1=save_dir,
-    input2=gt_dir,
-    cuda=True,
-    fid=True,
-    isc=True
-)
+        # validation
+        if (epoch+1) % 10 == 0:
+            valid_real_A, valid_real_B = next(iter(validloader))
+            # sample_images(valid_real_A, valid_real_B)
 
-fid_score = metrics["frechet_inception_distance"]
-is_score = metrics["inception_score_mean"]
+            loss_D = (loss_D_A + loss_D_B) / 2
+            print(f'[Epoch {epoch+1}/{n_epoches}]')
+            print(f'[G loss: {loss_G.item()} | identity: {loss_identity.item()} GAN: {loss_GAN.item()} cycle: {loss_cycle.item()}]')
+            print(f'[D loss: {loss_D.item()} | D_A: {loss_D_A.item()} D_B: {loss_D_B.item()}]')
 
-if is_score > 0:
-    s_value_1 = np.sqrt(fid_score / is_score)
-    print("Geometric Mean Score:", s_value_1)
-else:
-    print("IS is 0, GMS cannot be computed!")
+    """## 5. Evaluation"""
 
-## Translation 2: B Image --> A Image
-test_dir = os.path.join(data_dir, 'VAE_generation1/test') # modification forbidden
-files = [os.path.join(test_dir, name) for name in os.listdir(test_dir)]
+    """
+    Step 8. Generate Images
+    """
+    ## Translation 1: A Image --> B Image
+    test_dir = os.path.join(data_dir, 'VAE_generation/test') # modification forbidden
+    files = [os.path.join(test_dir, name) for name in os.listdir(test_dir)]
 
-save_dir = '../generated_A_images'
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
+    save_dir = os.path.join(model_dir, 'generated_B_images')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
-G_BA.eval()
-for i in range(0, len(files), batch_size):
-    # read images
-    imgs = []
-    for j in range(i, min(len(files), i+batch_size)):
-        img = Image.open(files[j])
-        img = transforms_(img)
-        imgs.append(img)
-    imgs = torch.stack(imgs, 0).type(Tensor)
+    to_image = transforms.ToPILImage()
 
-    # generate
-    fake_imgs = G_BA(imgs).detach().cpu()
+    G_AB.eval()
+    for i in range(0, len(files), batch_size):
+        # read images
+        imgs = []
+        for j in range(i, min(len(files), i+batch_size)):
+            img = Image.open(files[j])
+            img = transforms_(img)
+            imgs.append(img)
+        imgs = torch.stack(imgs, 0).type(Tensor)
 
-    # save
-    for j in range(fake_imgs.size(0)):
-        img = fake_imgs[j].squeeze().permute(1, 2, 0)
-        img_arr = img.numpy()
-        img_arr = (img_arr - np.min(img_arr)) * 255 / (np.max(img_arr) - np.min(img_arr))
-        img_arr = img_arr.astype(np.uint8)
+        # generate
+        fake_imgs = G_AB(imgs).detach().cpu()
 
-        img = to_image(img_arr)
-        _, name = os.path.split(files[i+j])
-        img.save(os.path.join(save_dir, name))
+        # save
+        for j in range(fake_imgs.size(0)):
+            img = fake_imgs[j].squeeze().permute(1, 2, 0)
+            img_arr = img.numpy()
+            img_arr = (img_arr - np.min(img_arr)) * 255 / (np.max(img_arr) - np.min(img_arr))
+            img_arr = img_arr.astype(np.uint8)
 
-gt_dir = os.path.join(data_dir, 'VAE_generation/test')
+            img = to_image(img_arr)
+            _, name = os.path.split(files[i+j])
+            img.save(os.path.join(save_dir, name))
 
-metrics = torch_fidelity.calculate_metrics(
-    input1 = save_dir,
-    input2 = gt_dir,
-    cuda = True,
-    fid = True,
-    isc = True
-)
+    gt_dir = os.path.join(data_dir, 'VAE_generation1/test')
+    metrics = torch_fidelity.calculate_metrics(
+        input1=save_dir,
+        input2=gt_dir,
+        cuda=True,
+        fid=True,
+        isc=True
+    )
 
-fid_score = metrics["frechet_inception_distance"]
-is_score = metrics["inception_score_mean"]
+    fid_score = metrics["frechet_inception_distance"]
+    is_score = metrics["inception_score_mean"]
 
-if is_score > 0:
-    s_value_2 = np.sqrt(fid_score / is_score)
-    print("Geometric Mean Score:", s_value_2)
-else:
-    print("IS is 0, GMS cannot be computed!")
+    if is_score > 0:
+        s_value_1 = np.sqrt(fid_score / is_score)
+        print("Geometric Mean Score:", s_value_1)
+    else:
+        print("IS is 0, GMS cannot be computed!")
 
-s_value = np.round((s_value_1+s_value_2)/2, 5)
+    ## Translation 2: B Image --> A Image
+    test_dir = os.path.join(data_dir, 'VAE_generation1/test') # modification forbidden
+    files = [os.path.join(test_dir, name) for name in os.listdir(test_dir)]
 
-df = pd.DataFrame({'id': [1], 'label': [s_value]})
-csv_path = "Userid.csv"
-df.to_csv(csv_path, index=False)
+    save_dir = os.path.join(model_dir, 'generated_A_images')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
-print(f"CSV saved to {csv_path}")
+    G_BA.eval()
+    for i in range(0, len(files), batch_size):
+        # read images
+        imgs = []
+        for j in range(i, min(len(files), i+batch_size)):
+            img = Image.open(files[j])
+            img = transforms_(img)
+            imgs.append(img)
+        imgs = torch.stack(imgs, 0).type(Tensor)
+
+        # generate
+        fake_imgs = G_BA(imgs).detach().cpu()
+
+        # save
+        for j in range(fake_imgs.size(0)):
+            img = fake_imgs[j].squeeze().permute(1, 2, 0)
+            img_arr = img.numpy()
+            img_arr = (img_arr - np.min(img_arr)) * 255 / (np.max(img_arr) - np.min(img_arr))
+            img_arr = img_arr.astype(np.uint8)
+
+            img = to_image(img_arr)
+            _, name = os.path.split(files[i+j])
+            img.save(os.path.join(save_dir, name))
+
+    gt_dir = os.path.join(data_dir, 'VAE_generation/test')
+
+    metrics = torch_fidelity.calculate_metrics(
+        input1 = save_dir,
+        input2 = gt_dir,
+        cuda = True,
+        fid = True,
+        isc = True
+    )
+
+    fid_score = metrics["frechet_inception_distance"]
+    is_score = metrics["inception_score_mean"]
+
+    if is_score > 0:
+        s_value_2 = np.sqrt(fid_score / is_score)
+        print("Geometric Mean Score:", s_value_2)
+    else:
+        print("IS is 0, GMS cannot be computed!")
+
+    s_value = np.round((s_value_1+s_value_2)/2, 5)
+
+    df = pd.DataFrame({'id': [1], 'label': [s_value]})
+    csv_path = os.path.join(model_dir, "Userid.csv")
+    df.to_csv(csv_path, index=False)
+
+    print(f"CSV saved to {csv_path}")
+
+if __name__ == "__main__":
+    main()
