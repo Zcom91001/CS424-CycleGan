@@ -34,6 +34,8 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 data_dir = "C:/Users/dan_t/OneDrive/Desktop/CS424"
+if platform.system() != "Windows":
+    data_dir = "/common/home/users/d/daniel.tan.2023/scratchDirectory"
 
 """## 2. Define your model"""
 
