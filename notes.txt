@@ -1,13 +1,13 @@
-v0      3.81233
+v0      9.45669,3.81233
 Baseline, 100 epochs
 
-v0.1    
+v0.1    9.70798,4.09604
 Reduce weight identity from 5 to 0.5
 
-v0.2    
+v0.2    9.59427,4.01864
 Fix save normalisation
 
-v0.3    
+v0.3    9.57262,3.79253
 Add Beta1 = 0.5 to Adam
 
 v0.4    
@@ -20,4 +20,4 @@ v0.6
 Add Data augment (from 5.4)
 
 v0.7    
-Train/eval at 512x512 (batch_size=1)
+Train/eval at 512x512 (batch_size=1), epoch to 500 to make up for batch size drop from 5 to 1

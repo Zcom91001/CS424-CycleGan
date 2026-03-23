@@ -339,19 +339,7 @@ def main():
     os.makedirs(model_dir, exist_ok=True)
 
     image_size = (512, 512)
-    train_transforms_ = transforms.Compose([
-        transforms.Resize(image_size),
-        transforms.RandomHorizontalFlip(p=0.1),
-        transforms.RandomApply([
-            transforms.RandomChoice([
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                transforms.RandomCrop(512, padding=32, padding_mode='reflect'),
-            ])
-        ], p=0.8),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    valid_transforms_ = transforms.Compose([
+    transforms_ = transforms.Compose([
         transforms.Resize(image_size),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -360,13 +348,13 @@ def main():
     batch_size = 1
 
     trainloader = DataLoader(
-        ImageDataset(data_dir, mode='train', transforms=train_transforms_),
+        ImageDataset(data_dir, mode='train', transforms=transforms_),
         batch_size = batch_size,
         shuffle = True
     )
 
     validloader = DataLoader(
-        ImageDataset(data_dir, mode='valid', transforms=valid_transforms_),
+        ImageDataset(data_dir, mode='valid', transforms=transforms_),
         batch_size = batch_size,
         shuffle = False
     )
@@ -472,7 +460,7 @@ def main():
         imgs = []
         for j in range(i, min(len(files), i+batch_size)):
             img = Image.open(files[j])
-            img = valid_transforms_(img)
+            img = transforms_(img)
             imgs.append(img)
         imgs = torch.stack(imgs, 0).type(Tensor)
 
@@ -522,7 +510,7 @@ def main():
         imgs = []
         for j in range(i, min(len(files), i+batch_size)):
             img = Image.open(files[j])
-            img = valid_transforms_(img)
+            img = transforms_(img)
             imgs.append(img)
         imgs = torch.stack(imgs, 0).type(Tensor)
 
