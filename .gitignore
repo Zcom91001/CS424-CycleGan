@@ -1,0 +1,5 @@
+*.zip
+**/*.jpg
+*.pdf
+**/__pycache__/*
+

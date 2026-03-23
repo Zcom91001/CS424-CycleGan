@@ -1,0 +1,23 @@
+v0      3.81233
+Baseline, 100 epochs
+
+v0.1    
+Reduce weight identity from 5 to 0.5
+
+v0.2    
+Fix save normalisation
+
+v0.3    
+Add Beta1 = 0.5 to Adam
+
+v0.4    
+Add replay buffer 
+
+v0.5    
+Add LR scheduler 
+
+v0.6    
+Add Data augment (from 5.4)
+
+v0.7    
+Train/eval at 512x512 (batch_size=1)

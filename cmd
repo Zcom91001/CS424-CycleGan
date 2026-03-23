@@ -1,0 +1,1 @@
+cd C:\Users\dan_t\OneDrive\Desktop\CS424\models && C:\Users\dan_t\venv312\Scripts\activate
