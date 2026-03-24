@@ -16,12 +16,12 @@ Thumbs.db
 .idea/
 
 # Dataset (do not commit raw data)
-image_image_translation/
+**/image_image_translation/
 
 # Generated outputs / run artifacts
-outputs/
-generated_A_images/
-generated_B_images/
+**/outputs/
+**/generated_A_images/
+**/generated_B_images/
 
 # Submission/evaluation artifacts
 user_id.csv

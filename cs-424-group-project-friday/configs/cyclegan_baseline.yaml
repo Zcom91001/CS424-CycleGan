@@ -14,7 +14,8 @@ train:
   device: auto
   epochs: 50
   batch_size: 1
-  num_workers: 0
+  num_workers: 4
+  best_eval_every_epochs: 5
   fake_pool_size: 50
   lr_g: 0.0002
   lr_d: 0.0002
