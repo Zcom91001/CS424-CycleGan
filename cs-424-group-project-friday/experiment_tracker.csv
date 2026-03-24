@@ -4,3 +4,12 @@ registry_unet_smoke,ablation_model_unet,custom,All non-mentioned settings unchan
 registry_resnet_smoke,baseline,baseline,All non-mentioned settings unchanged,48.0994,Pending manual visual review,tbd
 registry_unet_smoke_v2,ablation_model_unet,Model architecture: toy_resnet -> toy_unet,All non-mentioned settings unchanged,46.5384,Pending manual visual review,tbd
 model_transformer_smoke,ablation_model_transformer,custom,All non-mentioned settings unchanged,47.7450,Pending manual visual review,tbd
+screen_toy_resnet,baseline_toy_resnet,Model screening,All non-mentioned settings unchanged,1.29132,Model screening,tbd
+screen_toy_unet,baseline_toy_unet,Model screening,All non-mentioned settings unchanged,1.29132,Model screening,tbd
+screen_toy_mobilenet,baseline_toy_mobilenet,Model screening,All non-mentioned settings unchanged,1.29132,Model screening,tbd
+screen_toy_dense,baseline_toy_dense,evaluation refresh,All non-mentioned settings unchanged,1.25003,Pending manual visual review,tbd
+screen_toy_transformer,baseline_toy_transformer,Model screening,All non-mentioned settings unchanged,1.29132,Model screening,tbd
+screen_toy_shallow,baseline_toy_shallow,Model screening,All non-mentioned settings unchanged,1.29132,Model screening,tbd
+sanity_directional,baseline,baseline,All non-mentioned settings unchanged,45.0359,Pending manual visual review,tbd
+directional_ba_focus,directional_ba_focus,Directional loss/LR weighting for B->A,All non-mentioned settings unchanged,1.28409,Directional tuning run,tbd
+directional_ab_focus,directional_ab_focus,evaluation refresh,All non-mentioned settings unchanged,1.29132,Pending manual visual review,tbd

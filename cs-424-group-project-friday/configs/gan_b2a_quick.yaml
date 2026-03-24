@@ -1,0 +1,25 @@
+experiment_name: gan_b2a_quick
+seed: 42
+data:
+  domain_a_train: image_image_translation/image_image_translation/VAE_generation/train
+  domain_b_train: image_image_translation/image_image_translation/VAE_generation1/train
+  domain_a_test: image_image_translation/image_image_translation/VAE_generation/test
+  domain_b_test: image_image_translation/image_image_translation/VAE_generation1/test
+  image_size: 128
+model:
+  ngf: 32
+  ndf: 32
+  n_blocks: 3
+train:
+  device: auto
+  epochs: 1
+  batch_size: 1
+  num_workers: 0
+  lr_g: 0.0002
+  lr_d: 0.0002
+  beta1: 0.5
+  beta2: 0.999
+  save_every: 1
+  log_every_steps: 50
+loss:
+  lambda_identity_a: 5.0

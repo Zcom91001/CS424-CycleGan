@@ -1,0 +1,14 @@
+{
+  "dataset_choice": "vae",
+  "nn_choice": "mlp",
+  "batch_size": 128,
+  "z_dim": 64,
+  "lr_D": 0.0004,
+  "lr_G": 0.0002,
+  "num_epochs": 15,
+  "image_size": 64,
+  "hidden_dim_mlp": 256,
+  "hidden_dim_cnn": 12,
+  "domain_a_train": "image_image_translation/image_image_translation/VAE_generation/train",
+  "domain_b_train": "image_image_translation/image_image_translation/VAE_generation1/train"
+}

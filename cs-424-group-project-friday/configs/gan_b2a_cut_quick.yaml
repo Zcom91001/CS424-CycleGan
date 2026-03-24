@@ -1,0 +1,31 @@
+experiment_name: gan_b2a_cut_quick
+seed: 42
+data:
+  domain_a_train: image_image_translation/image_image_translation/VAE_generation/train
+  domain_b_train: image_image_translation/image_image_translation/VAE_generation1/train
+  domain_a_test: image_image_translation/image_image_translation/VAE_generation/test
+  domain_b_test: image_image_translation/image_image_translation/VAE_generation1/test
+  image_size: 128
+model:
+  ngf: 32
+  ndf: 32
+  n_blocks: 3
+  proj_dim: 128
+  num_patches: 128
+train:
+  device: auto
+  epochs: 5
+  batch_size: 1
+  num_workers: 0
+  lr_g: 0.0002
+  lr_d: 0.0002
+  lr_f: 0.0002
+  beta1: 0.5
+  beta2: 0.999
+  save_every: 1
+  log_every_steps: 50
+loss:
+  lambda_nce: 1.0
+  lambda_identity_a: 1.0
+  nce_temperature: 0.07
+  use_nce_identity: true
