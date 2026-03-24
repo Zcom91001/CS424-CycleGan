@@ -38,6 +38,34 @@ def _resolve_device(requested):
     return torch.device(req)
 
 
+class ImagePool:
+    def __init__(self, pool_size=50):
+        self.pool_size = int(pool_size)
+        self.images = []
+
+    def query(self, images):
+        if self.pool_size <= 0:
+            return images
+
+        selected = []
+        for image in images:
+            image = image.unsqueeze(0)
+            if len(self.images) < self.pool_size:
+                self.images.append(image.detach().clone())
+                selected.append(image)
+                continue
+
+            if random.random() > 0.5:
+                idx = random.randint(0, self.pool_size - 1)
+                pooled = self.images[idx].clone()
+                self.images[idx] = image.detach().clone()
+                selected.append(pooled)
+            else:
+                selected.append(image)
+
+        return torch.cat(selected, dim=0)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train CycleGAN on unpaired A/B image domains.")
     parser.add_argument("--config", required=True, help="Path to YAML config")
@@ -91,6 +119,9 @@ def main():
     )
     optim_d_a = torch.optim.Adam(d_a.parameters(), lr=lr_d, betas=betas)
     optim_d_b = torch.optim.Adam(d_b.parameters(), lr=lr_d, betas=betas)
+    fake_pool_size = int(train_cfg.get("fake_pool_size", 50))
+    fake_a_pool = ImagePool(pool_size=fake_pool_size)
+    fake_b_pool = ImagePool(pool_size=fake_pool_size)
 
     l1 = nn.L1Loss()
     mse = nn.MSELoss()
@@ -174,7 +205,8 @@ def main():
             # -------------------------
             optim_d_a.zero_grad(set_to_none=True)
             pred_real_a = d_a(real_a)
-            pred_fake_a_detached = d_a(fake_a.detach())
+            fake_a_for_d = fake_a_pool.query(fake_a.detach())
+            pred_fake_a_detached = d_a(fake_a_for_d)
             d_a_real_loss = mse(pred_real_a, torch.ones_like(pred_real_a, device=device))
             d_a_fake_loss = mse(pred_fake_a_detached, torch.zeros_like(pred_fake_a_detached, device=device))
             d_a_loss = 0.5 * (d_a_real_loss + d_a_fake_loss)
@@ -186,7 +218,8 @@ def main():
             # -------------------------
             optim_d_b.zero_grad(set_to_none=True)
             pred_real_b = d_b(real_b)
-            pred_fake_b_detached = d_b(fake_b.detach())
+            fake_b_for_d = fake_b_pool.query(fake_b.detach())
+            pred_fake_b_detached = d_b(fake_b_for_d)
             d_b_real_loss = mse(pred_real_b, torch.ones_like(pred_real_b, device=device))
             d_b_fake_loss = mse(pred_fake_b_detached, torch.zeros_like(pred_fake_b_detached, device=device))
             d_b_loss = 0.5 * (d_b_real_loss + d_b_fake_loss)

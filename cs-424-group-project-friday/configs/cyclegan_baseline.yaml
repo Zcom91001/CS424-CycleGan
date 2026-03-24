@@ -15,6 +15,7 @@ train:
   epochs: 50
   batch_size: 1
   num_workers: 0
+  fake_pool_size: 50
   lr_g: 0.0002
   lr_d: 0.0002
   beta1: 0.5
