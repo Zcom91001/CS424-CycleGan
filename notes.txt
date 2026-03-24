@@ -13,7 +13,7 @@ Add Beta1 = 0.5 to Adam
 v0.4    
 Add replay buffer 
 
-v0.5    
+v0.5    9.35425,3.7547
 Add LR scheduler 
 
 v0.6    
