@@ -12,7 +12,7 @@ model:
   n_blocks: 6
 train:
   device: auto
-  epochs: 50
+  epochs: 20
   batch_size: 1
   num_workers: 4
   best_eval_every_epochs: 5 

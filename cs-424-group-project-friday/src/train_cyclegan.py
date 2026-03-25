@@ -1,5 +1,8 @@
 import argparse
+import json
 import random
+import subprocess
+import sys
 from pathlib import Path
 
 import torch
@@ -36,6 +39,73 @@ def _resolve_device(requested):
     if req == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return torch.device(req)
+
+
+def _run_eval_for_checkpoint(repo_root, run_dir, cfg, checkpoint_path, epoch, max_images=None):
+    data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
+    domain_a_test = data_cfg.get("domain_a_test")
+    domain_b_test = data_cfg.get("domain_b_test")
+    if not domain_a_test or not domain_b_test:
+        print(
+            "Per-epoch eval skipped: data.domain_a_test/domain_b_test not set in config.",
+            flush=True,
+        )
+        return None
+
+    repo_root = Path(repo_root).resolve()
+    checkpoint_path = Path(checkpoint_path).resolve()
+    eval_dir = Path(run_dir).resolve() / "evaluate" / "by_epoch" / f"epoch_{int(epoch):03d}"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        sys.executable,
+        str(repo_root / "src" / "evaluate.py"),
+        "--bidirectional",
+        "--checkpoint",
+        str(checkpoint_path),
+        "--input-a-dir",
+        str(repo_root / str(domain_a_test)),
+        "--input-b-dir",
+        str(repo_root / str(domain_b_test)),
+        "--generated-a-dir",
+        str(eval_dir / "generated_A"),
+        "--generated-b-dir",
+        str(eval_dir / "generated_B"),
+        "--real-a-dir",
+        str(repo_root / str(domain_a_test)),
+        "--real-b-dir",
+        str(repo_root / str(domain_b_test)),
+        "--model-type",
+        "gan",
+        "--image-size",
+        str(int(data_cfg.get("image_size", 128))),
+        "--allow-nonempty-generated-dir",
+        "--out-json",
+        str(eval_dir),
+    ]
+    if max_images is not None:
+        cmd.extend(["--max-images", str(int(max_images))])
+
+    try:
+        subprocess.run(cmd, check=True)
+    except Exception as exc:
+        print(f"Per-epoch eval failed for epoch {epoch}: {exc}", flush=True)
+        return None
+
+    eval_files = sorted(eval_dir.glob("eval_*.json"), key=lambda p: p.stat().st_mtime)
+    if not eval_files:
+        print(f"Per-epoch eval did not produce an eval_*.json file for epoch {epoch}.", flush=True)
+        return None
+
+    try:
+        payload = json.loads(eval_files[-1].read_text(encoding="utf-8"))
+        score = payload.get("gms_avg")
+        if score is None:
+            return None
+        return float(score)
+    except Exception as exc:
+        print(f"Failed to parse eval output for epoch {epoch}: {exc}", flush=True)
+        return None
 
 
 def main():
@@ -102,9 +172,15 @@ def main():
 
     n_epochs = int(args.epochs or train_cfg.get("epochs", 100))
     log_every_steps = int(train_cfg.get("log_every_steps", 50))
+    select_best_by = str(train_cfg.get("select_best_by", "eval_gms")).strip().lower()
+    best_eval_every_epochs = max(1, int(train_cfg.get("best_eval_every_epochs", 1)))
+    best_eval_max_images = train_cfg.get("best_eval_max_images", None)
+    best_score_name = "gms_avg"
 
     metrics_csv = dirs["run_dir"] / "metrics.csv"
     best_score = float("inf")
+    best_epoch = None
+    has_best_checkpoint = False
     final_payload = None
     print(f"Starting training on device={device} with {len(loader)} steps/epoch for {n_epochs} epochs", flush=True)
 
@@ -244,16 +320,38 @@ def main():
         }
         final_payload = ckpt_payload
 
-        score = float(epoch_row["g_total"])
+        candidate_ckpt = dirs["checkpoints"] / "_candidate_for_eval.pth"
+        save_checkpoint(candidate_ckpt, ckpt_payload)
+
+        score = None
+        score_name = None
+        if select_best_by == "eval_gms" and (epoch % best_eval_every_epochs == 0):
+            score = _run_eval_for_checkpoint(
+                repo_root=repo_root,
+                run_dir=dirs["run_dir"],
+                cfg=cfg,
+                checkpoint_path=candidate_ckpt,
+                epoch=epoch,
+                max_images=best_eval_max_images,
+            )
+            score_name = best_score_name if score is not None else None
+
+        if score is None:
+            score = float(epoch_row["g_total"])
+            score_name = "g_total_fallback"
+
         if score < best_score:
             best_score = score
+            best_epoch = epoch
+            has_best_checkpoint = True
             save_checkpoint(dirs["checkpoints"] / "best.pth", ckpt_payload)
 
         print(
             f"[Epoch {epoch:03d}/{n_epochs}] "
             f"G={float(epoch_row['g_total']):.4f} "
             f"D_A={float(epoch_row['d_a_loss']):.4f} "
-            f"D_B={float(epoch_row['d_b_loss']):.4f}",
+            f"D_B={float(epoch_row['d_b_loss']):.4f} "
+            f"best_metric={score_name}:{score:.5f}",
             flush=True,
         )
 
@@ -270,10 +368,16 @@ def main():
             "optim_d_b": optim_d_b.state_dict(),
             "metrics": {},
         }
+    if not has_best_checkpoint:
+        save_checkpoint(dirs["checkpoints"] / "best.pth", final_payload)
+        print("No best checkpoint was selected during training; saved final checkpoint as best.pth.", flush=True)
+
     save_checkpoint(dirs["checkpoints"] / "final.pth", final_payload)
 
     save_loss_plot(metrics_csv, dirs["plots"] / "losses.png")
     run_auto_evaluation(repo_root=repo_root, dirs=dirs, cfg=cfg, model_type="gan")
+    if best_epoch is not None:
+        print(f"Best checkpoint selected at epoch {best_epoch} using minimized score={best_score:.5f}.", flush=True)
     print(f"Run complete: {run_name}", flush=True)
     print(f"Artifacts: {dirs['run_dir']}", flush=True)
 
