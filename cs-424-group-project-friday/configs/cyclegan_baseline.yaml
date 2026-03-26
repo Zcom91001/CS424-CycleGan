@@ -12,7 +12,7 @@ model:
   n_blocks: 6
 train:
   device: auto
-  epochs: 20
+  epochs: 150
   batch_size: 1
   num_workers: 4
   best_eval_every_epochs: 5 
@@ -22,7 +22,7 @@ train:
   beta2: 0.999
   save_every: 5
 loss:
-  lambda_cycle_a: 15.0
-  lambda_cycle_b: 15.0
+  lambda_cycle_a: 20.0
+  lambda_cycle_b: 20.0
   lambda_identity_a: 5.0
   lambda_identity_b: 5.0

@@ -15,7 +15,7 @@
                                     # Format <DD-HH:MM:SS> eg. 5 days 05-00:00:00
                                     # Format <DD-HH:MM:SS> eg. 24 hours 1-00:00:00 or 24:00:00
 #SBATCH --mail-type=ALL  # When should you receive an email?
-#SBATCH --output=joseph_cyclegan_baseline_20_adjustedlr.out       # Where should the log files go?
+#SBATCH --output=joseph_cyclegan_baseline_150_adjustedlr_v2.out       # Where should the log files go?
                                     # You must provide an absolute path eg /common/home/module/username/
                                     # If no paths are provided, the output file will be placed in your current working directory
 
@@ -53,4 +53,4 @@ pip3 install torch==2.4.1+cu118 torchvision==0.19.1+cu118 --index-url https://do
 pip3 install torch_fidelity
 
 # Submit your job to the cluster
-srun --ntasks=1 --gres=gpu:1 $HOME/myenv/bin/python3.12 -u src/train_cyclegan.py --config configs/cyclegan_baseline.yaml --run-name cyclegan_baseline_20_adjustedlr
+srun --ntasks=1 --gres=gpu:1 $HOME/myenv/bin/python3.12 -u src/train_cyclegan.py --config configs/cyclegan_baseline.yaml --run-name cyclegan_baseline_150_adjustedlr_v2
