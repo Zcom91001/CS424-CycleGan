@@ -98,3 +98,13 @@ From the provided log file:
 ## Conclusion
 
 The no-replay CycleGAN setup is functioning correctly and shows consistent improvement as training epochs increase. Among the provided evaluation artifacts, the best result is at **100 epochs** with **`GMS_avg = 4.30205`**.
+
+
+### Next Step
+
+Good starting grid:
+
+cycle=15, identity=5 (more structure preservation) (worse then original)
+cycle=20, identity=5 (strong structure constraint)
+cycle=10, identity=7.5 (less color/style drift)
+cycle=10, identity=10 (strong color preservation)
