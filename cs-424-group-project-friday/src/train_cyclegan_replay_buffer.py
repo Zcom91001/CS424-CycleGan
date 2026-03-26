@@ -358,22 +358,34 @@ def main():
 
         score = None
         score_name = None
-        if select_best_by == "eval_gms" and (epoch % best_eval_every_epochs == 0):
-            score = _run_eval_for_checkpoint(
-                repo_root=repo_root,
-                run_dir=dirs["run_dir"],
-                cfg=cfg,
-                checkpoint_path=candidate_ckpt,
-                epoch=epoch,
-                max_images=best_eval_max_images,
-            )
-            score_name = best_score_name if score is not None else None
+        score_display = "n/a"
+        should_update_best = False
 
-        if score is None:
+        if select_best_by == "eval_gms":
+            if epoch % best_eval_every_epochs == 0:
+                score = _run_eval_for_checkpoint(
+                    repo_root=repo_root,
+                    run_dir=dirs["run_dir"],
+                    cfg=cfg,
+                    checkpoint_path=candidate_ckpt,
+                    epoch=epoch,
+                    max_images=best_eval_max_images,
+                )
+                if score is not None:
+                    score_name = best_score_name
+                    score_display = f"{score:.5f}"
+                    should_update_best = True
+                else:
+                    score_name = "eval_gms_unavailable"
+            else:
+                score_name = f"eval_gms_skipped_every_{best_eval_every_epochs}"
+        else:
             score = float(epoch_row["g_total"])
-            score_name = "g_total_fallback"
+            score_name = "g_total"
+            score_display = f"{score:.5f}"
+            should_update_best = True
 
-        if score < best_score:
+        if should_update_best and score < best_score:
             best_score = score
             best_epoch = epoch
             has_best_checkpoint = True
@@ -384,7 +396,7 @@ def main():
             f"G={float(epoch_row['g_total']):.4f} "
             f"D_A={float(epoch_row['d_a_loss']):.4f} "
             f"D_B={float(epoch_row['d_b_loss']):.4f} "
-            f"best_metric={score_name}:{score:.5f}",
+            f"best_metric={score_name}:{score_display}",
             flush=True,
         )
 
