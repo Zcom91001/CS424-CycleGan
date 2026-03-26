@@ -8,7 +8,7 @@ import re
 import torch
 from PIL import Image
 
-from cut_models import CutGenerator
+
 from cyclegan_models import ResnetGenerator
 from cyclegan_io import tensor_to_pil
 

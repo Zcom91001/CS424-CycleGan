@@ -22,6 +22,7 @@ Thumbs.db
 **/outputs/
 **/generated_A_images/
 **/generated_B_images/
+*.out
 
 # Submission/evaluation artifacts
 user_id.csv
@@ -31,3 +32,6 @@ Userid.csv
 *.pt
 *.pth
 *.ckpt
+
+# Job logs
+*.out
