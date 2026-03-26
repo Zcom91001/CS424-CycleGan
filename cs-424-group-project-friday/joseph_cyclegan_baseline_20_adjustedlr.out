@@ -1,0 +1,104 @@
+Requirement already satisfied: numpy in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (2.4.3)
+Requirement already satisfied: pandas in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (3.0.1)
+Requirement already satisfied: matplotlib in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (3.10.8)
+Requirement already satisfied: pillow in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (12.1.1)
+Requirement already satisfied: python-dateutil>=2.8.2 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from pandas) (2.9.0.post0)
+Requirement already satisfied: contourpy>=1.0.1 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from matplotlib) (1.3.3)
+Requirement already satisfied: cycler>=0.10 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from matplotlib) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from matplotlib) (4.62.1)
+Requirement already satisfied: kiwisolver>=1.3.1 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from matplotlib) (1.5.0)
+Requirement already satisfied: packaging>=20.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from matplotlib) (26.0)
+Requirement already satisfied: pyparsing>=3 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from matplotlib) (3.3.2)
+Requirement already satisfied: six>=1.5 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas) (1.17.0)
+
+[notice] A new release of pip is available: 24.3.1 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip
+Looking in indexes: https://download.pytorch.org/whl/cu118
+Requirement already satisfied: torch==2.4.1+cu118 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (2.4.1+cu118)
+Requirement already satisfied: torchvision==0.19.1+cu118 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (0.19.1+cu118)
+Requirement already satisfied: filelock in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (3.25.2)
+Requirement already satisfied: typing-extensions>=4.8.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (4.15.0)
+Requirement already satisfied: sympy in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (1.14.0)
+Requirement already satisfied: networkx in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (3.6.1)
+Requirement already satisfied: jinja2 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (3.1.6)
+Requirement already satisfied: fsspec in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (2026.2.0)
+Requirement already satisfied: setuptools in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (70.2.0)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu11==11.8.89 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.8.89)
+Requirement already satisfied: nvidia-cuda-runtime-cu11==11.8.89 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.8.89)
+Requirement already satisfied: nvidia-cuda-cupti-cu11==11.8.87 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.8.87)
+Requirement already satisfied: nvidia-cudnn-cu11==9.1.0.70 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (9.1.0.70)
+Requirement already satisfied: nvidia-cublas-cu11==11.11.3.6 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.11.3.6)
+Requirement already satisfied: nvidia-cufft-cu11==10.9.0.58 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (10.9.0.58)
+Requirement already satisfied: nvidia-curand-cu11==10.3.0.86 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (10.3.0.86)
+Requirement already satisfied: nvidia-cusolver-cu11==11.4.1.48 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.4.1.48)
+Requirement already satisfied: nvidia-cusparse-cu11==11.7.5.86 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.7.5.86)
+Requirement already satisfied: nvidia-nccl-cu11==2.20.5 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (2.20.5)
+Requirement already satisfied: nvidia-nvtx-cu11==11.8.86 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (11.8.86)
+Requirement already satisfied: triton==3.0.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch==2.4.1+cu118) (3.0.0)
+Requirement already satisfied: numpy in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torchvision==0.19.1+cu118) (2.4.3)
+Requirement already satisfied: pillow!=8.3.*,>=5.3.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torchvision==0.19.1+cu118) (12.1.1)
+Requirement already satisfied: MarkupSafe>=2.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from jinja2->torch==2.4.1+cu118) (3.0.2)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from sympy->torch==2.4.1+cu118) (1.3.0)
+
+[notice] A new release of pip is available: 24.3.1 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip
+Requirement already satisfied: torch_fidelity in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (0.4.0)
+Requirement already satisfied: numpy in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch_fidelity) (2.4.3)
+Requirement already satisfied: pillow in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch_fidelity) (12.1.1)
+Requirement already satisfied: torch in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch_fidelity) (2.4.1+cu118)
+Requirement already satisfied: torchvision in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch_fidelity) (0.19.1+cu118)
+Requirement already satisfied: tqdm in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch_fidelity) (4.67.3)
+Requirement already satisfied: filelock in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (3.25.2)
+Requirement already satisfied: typing-extensions>=4.8.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (4.15.0)
+Requirement already satisfied: sympy in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (1.14.0)
+Requirement already satisfied: networkx in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (3.6.1)
+Requirement already satisfied: jinja2 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (3.1.6)
+Requirement already satisfied: fsspec in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (2026.2.0)
+Requirement already satisfied: setuptools in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (70.2.0)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu11==11.8.89 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.8.89)
+Requirement already satisfied: nvidia-cuda-runtime-cu11==11.8.89 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.8.89)
+Requirement already satisfied: nvidia-cuda-cupti-cu11==11.8.87 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.8.87)
+Requirement already satisfied: nvidia-cudnn-cu11==9.1.0.70 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (9.1.0.70)
+Requirement already satisfied: nvidia-cublas-cu11==11.11.3.6 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.11.3.6)
+Requirement already satisfied: nvidia-cufft-cu11==10.9.0.58 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (10.9.0.58)
+Requirement already satisfied: nvidia-curand-cu11==10.3.0.86 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (10.3.0.86)
+Requirement already satisfied: nvidia-cusolver-cu11==11.4.1.48 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.4.1.48)
+Requirement already satisfied: nvidia-cusparse-cu11==11.7.5.86 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.7.5.86)
+Requirement already satisfied: nvidia-nccl-cu11==2.20.5 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (2.20.5)
+Requirement already satisfied: nvidia-nvtx-cu11==11.8.86 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (11.8.86)
+Requirement already satisfied: triton==3.0.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from torch->torch_fidelity) (3.0.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from jinja2->torch->torch_fidelity) (3.0.2)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages (from sympy->torch->torch_fidelity) (1.3.0)
+
+[notice] A new release of pip is available: 24.3.1 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip
+/common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:557: UserWarning: This DataLoader will create 4 worker processes in total. Our suggested max number of worker in current system is 2, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(_create_warning_msg(
+Starting training on device=cuda with 4000 steps/epoch for 20 epochs
+/common/home/projectgrps/CS424/CS424G6/myenv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:557: UserWarning: This DataLoader will create 4 worker processes in total. Our suggested max number of worker in current system is 2, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(_create_warning_msg(
+[Epoch 001/20] step 50/4000 G=16.1146 D_A=0.6799 D_B=0.9386
+[Epoch 001/20] step 100/4000 G=12.9608 D_A=0.4916 D_B=0.2655
+[Epoch 001/20] step 150/4000 G=10.2873 D_A=0.3532 D_B=0.3561
+[Epoch 001/20] step 200/4000 G=10.3907 D_A=0.3578 D_B=0.4213
+[Epoch 001/20] step 250/4000 G=14.1199 D_A=0.3059 D_B=0.3638
+[Epoch 001/20] step 300/4000 G=8.4507 D_A=0.3040 D_B=0.2144
+[Epoch 001/20] step 350/4000 G=14.4593 D_A=0.2949 D_B=0.3908
+[Epoch 001/20] step 400/4000 G=9.6808 D_A=0.2579 D_B=0.2926
+[Epoch 001/20] step 450/4000 G=19.7503 D_A=0.2291 D_B=0.1998
+[Epoch 001/20] step 500/4000 G=8.4164 D_A=0.2035 D_B=0.2441
+[Epoch 001/20] step 550/4000 G=8.0292 D_A=0.4096 D_B=0.3099
+[Epoch 001/20] step 600/4000 G=11.5267 D_A=0.3670 D_B=0.1860
+[Epoch 001/20] step 650/4000 G=9.0804 D_A=0.5228 D_B=0.1902
+[Epoch 001/20] step 700/4000 G=7.7270 D_A=0.2819 D_B=0.2261
+[Epoch 001/20] step 750/4000 G=9.0979 D_A=0.2351 D_B=0.3873
+[Epoch 001/20] step 800/4000 G=8.9095 D_A=0.2837 D_B=0.3325
+[Epoch 001/20] step 850/4000 G=11.2094 D_A=0.3677 D_B=0.2455
+[Epoch 001/20] step 900/4000 G=14.4398 D_A=0.3173 D_B=0.3283
+[Epoch 001/20] step 950/4000 G=8.0643 D_A=0.2762 D_B=0.3258
+[Epoch 001/20] step 1000/4000 G=6.8316 D_A=0.2337 D_B=0.2104
+[Epoch 001/20] step 1050/4000 G=7.4974 D_A=0.3840 D_B=0.2655
+[Epoch 001/20] step 1100/4000 G=6.7610 D_A=0.2757 D_B=0.4398
+[Epoch 001/20] step 1150/4000 G=9.4479 D_A=0.2971 D_B=0.1393
+[Epoch 001/20] step 1200/4000 G=8.1980 D_A=0.1704 D_B=0.2647
+[Epoch 001/20] step 1250/4000 G=8.1335 D_A=0.2490 D_B=0.1864
