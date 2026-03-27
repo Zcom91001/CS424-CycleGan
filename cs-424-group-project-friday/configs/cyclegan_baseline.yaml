@@ -23,7 +23,7 @@ train:
   beta2: 0.999
   save_every: 5
 loss:
-  lambda_cycle_a: 15.0
-  lambda_cycle_b: 15.0
+  lambda_cycle_a: 20.0
+  lambda_cycle_b: 20.0
   lambda_identity_a: 5.0
   lambda_identity_b: 5.0
