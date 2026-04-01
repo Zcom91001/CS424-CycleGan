@@ -41,6 +41,20 @@ def _resolve_device(requested):
     return torch.device(req)
 
 
+def _as_discriminator_outputs(prediction):
+    if isinstance(prediction, (list, tuple)):
+        return list(prediction)
+    return [prediction]
+
+
+def _mse_gan_loss(prediction, target_is_real, mse):
+    losses = []
+    for pred in _as_discriminator_outputs(prediction):
+        target = torch.ones_like(pred) if target_is_real else torch.zeros_like(pred)
+        losses.append(mse(pred, target))
+    return sum(losses) / len(losses)
+
+
 def _run_eval_for_checkpoint(repo_root, run_dir, cfg, checkpoint_path, epoch, max_images=None):
     data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
     domain_a_test = data_cfg.get("domain_a_test")
@@ -129,6 +143,7 @@ def main():
     loss_cfg = cfg.get("loss", {})
     data_cfg = cfg.get("data", {})
     device = _resolve_device(train_cfg.get("device", "auto"))
+    discriminator_cfg = model_cfg.get("discriminator", {}) if isinstance(model_cfg, dict) else {}
 
     dataset = UnpairedImageDataset(
         domain_a_dir=repo_root / str(data_cfg.get("domain_a_train")),
@@ -148,6 +163,7 @@ def main():
         ndf=int(model_cfg.get("ndf", 64)),
         n_blocks=int(model_cfg.get("n_blocks", 6)),
         device=device,
+        discriminator_cfg=discriminator_cfg,
     )
 
     lr_g = float(train_cfg.get("lr_g", 0.0002))
@@ -224,11 +240,8 @@ def main():
 
             pred_fake_b = d_b(fake_b)
             pred_fake_a = d_a(fake_a)
-            target_real_b = torch.ones_like(pred_fake_b, device=device)
-            target_real_a = torch.ones_like(pred_fake_a, device=device)
-
-            g_adv_ab = mse(pred_fake_b, target_real_b)
-            g_adv_ba = mse(pred_fake_a, target_real_a)
+            g_adv_ab = _mse_gan_loss(pred_fake_b, target_is_real=True, mse=mse)
+            g_adv_ba = _mse_gan_loss(pred_fake_a, target_is_real=True, mse=mse)
             cycle_a = l1(rec_a, real_a)
             cycle_b = l1(rec_b, real_b)
             id_loss_a = l1(id_a, real_a)
@@ -251,8 +264,8 @@ def main():
             optim_d_a.zero_grad(set_to_none=True)
             pred_real_a = d_a(real_a)
             pred_fake_a_detached = d_a(fake_a.detach())
-            d_a_real_loss = mse(pred_real_a, torch.ones_like(pred_real_a, device=device))
-            d_a_fake_loss = mse(pred_fake_a_detached, torch.zeros_like(pred_fake_a_detached, device=device))
+            d_a_real_loss = _mse_gan_loss(pred_real_a, target_is_real=True, mse=mse)
+            d_a_fake_loss = _mse_gan_loss(pred_fake_a_detached, target_is_real=False, mse=mse)
             d_a_loss = 0.5 * (d_a_real_loss + d_a_fake_loss)
             d_a_loss.backward()
             optim_d_a.step()
@@ -263,8 +276,8 @@ def main():
             optim_d_b.zero_grad(set_to_none=True)
             pred_real_b = d_b(real_b)
             pred_fake_b_detached = d_b(fake_b.detach())
-            d_b_real_loss = mse(pred_real_b, torch.ones_like(pred_real_b, device=device))
-            d_b_fake_loss = mse(pred_fake_b_detached, torch.zeros_like(pred_fake_b_detached, device=device))
+            d_b_real_loss = _mse_gan_loss(pred_real_b, target_is_real=True, mse=mse)
+            d_b_fake_loss = _mse_gan_loss(pred_fake_b_detached, target_is_real=False, mse=mse)
             d_b_loss = 0.5 * (d_b_real_loss + d_b_fake_loss)
             d_b_loss.backward()
             optim_d_b.step()
