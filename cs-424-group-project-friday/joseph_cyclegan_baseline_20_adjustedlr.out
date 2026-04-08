@@ -144,3 +144,14 @@ Starting training on device=cuda with 4000 steps/epoch for 20 epochs
 [Epoch 001/20] step 3250/4000 G=5.8476 D_A=0.2182 D_B=0.3749
 [Epoch 001/20] step 3300/4000 G=7.2864 D_A=0.2226 D_B=0.5515
 [Epoch 001/20] step 3350/4000 G=6.2041 D_A=0.1224 D_B=0.1959
+Job ID: 158198
+Cluster: crimson
+User/Group: CS424G6/CS424G6
+State: CANCELLED (exit code 0)
+Nodes: 1
+Cores per node: 2
+CPU Utilized: 00:00:03
+CPU Efficiency: 0.04% of 02:02:58 core-walltime
+Job Wall-clock time: 01:01:29
+Memory Utilized: 3.54 GB
+Memory Efficiency: 11.07% of 32.00 GB (32.00 GB/node)
