@@ -1,28 +1,34 @@
-experiment_name: cyclegan_baseline
+experiment_name: cyclegan_multiscale_disc
 seed: 42
 data:
   domain_a_train: image_image_translation/image_image_translation/VAE_generation/train
   domain_b_train: image_image_translation/image_image_translation/VAE_generation1/train
   domain_a_test: image_image_translation/image_image_translation/VAE_generation/test
   domain_b_test: image_image_translation/image_image_translation/VAE_generation1/test
-  image_size: 512
+  image_size: 128
 model:
   ngf: 64
   ndf: 64
   n_blocks: 6
+  discriminator:
+    type: multiscale
+    num_scales: 3
+    n_layers: 3
+    use_spectral_norm: true
+    use_instance_norm: true
 train:
   device: auto
   epochs: 20
   batch_size: 1
   num_workers: 4
-  best_eval_every_epochs: 5 
+  best_eval_every_epochs: 5
   lr_g: 0.0002
   lr_d: 0.0002
   beta1: 0.5
   beta2: 0.999
   save_every: 5
 loss:
-  lambda_cycle_a: 10.0
-  lambda_cycle_b: 10.0
+  lambda_cycle_a: 15.0
+  lambda_cycle_b: 15.0
   lambda_identity_a: 5.0
   lambda_identity_b: 5.0
