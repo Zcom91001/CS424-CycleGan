@@ -1,12 +1,10 @@
 import argparse
-import json
 import random
-import subprocess
-import sys
 from pathlib import Path
 
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from cyclegan_dataset import UnpairedImageDataset
@@ -18,6 +16,7 @@ from cyclegan_io import (
     save_loss_plot,
 )
 from cyclegan_models import build_cyclegan_models
+from evaluate import evaluate_bidirectional_generators
 from yaml_utils import load_yaml
 
 
@@ -55,7 +54,50 @@ def _mse_gan_loss(prediction, target_is_real, mse):
     return sum(losses) / len(losses)
 
 
-def _run_eval_for_checkpoint(repo_root, run_dir, cfg, checkpoint_path, epoch, max_images=None):
+class ReplayBuffer:
+    """Mix recent and historical fakes to reduce discriminator oscillation."""
+
+    def __init__(self, max_size=50):
+        self.max_size = max(0, int(max_size))
+        self.data = []
+
+    def push_and_pop(self, batch):
+        if self.max_size <= 0:
+            return batch
+
+        samples = []
+        for element in batch.detach():
+            element = element.unsqueeze(0)
+            if len(self.data) < self.max_size:
+                self.data.append(element.clone())
+                samples.append(element)
+                continue
+
+            if random.random() > 0.5:
+                idx = random.randint(0, self.max_size - 1)
+                samples.append(self.data[idx].clone())
+                self.data[idx] = element.clone()
+            else:
+                samples.append(element)
+        return torch.cat(samples, dim=0)
+
+
+def _build_linear_decay_scheduler(optimizer, total_epochs, start_epoch):
+    total_epochs = max(1, int(total_epochs))
+    start_epoch = min(max(0, int(start_epoch)), total_epochs)
+
+    def lr_lambda(epoch_index):
+        epoch_num = epoch_index + 1
+        if epoch_num <= start_epoch:
+            return 1.0
+        decay_span = max(1, total_epochs - start_epoch)
+        progress = min(epoch_num - start_epoch, decay_span)
+        return max(0.0, 1.0 - (progress / decay_span))
+
+    return LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+
+def _run_eval_for_checkpoint(repo_root, run_dir, cfg, checkpoint_path, epoch, g_ab, g_ba, max_images=None):
     data_cfg = cfg.get("data", {}) if isinstance(cfg, dict) else {}
     domain_a_test = data_cfg.get("domain_a_test")
     domain_b_test = data_cfg.get("domain_b_test")
@@ -71,48 +113,29 @@ def _run_eval_for_checkpoint(repo_root, run_dir, cfg, checkpoint_path, epoch, ma
     eval_dir = Path(run_dir).resolve() / "evaluate" / "by_epoch" / f"epoch_{int(epoch):03d}"
     eval_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        sys.executable,
-        str(repo_root / "src" / "evaluate.py"),
-        "--bidirectional",
-        "--checkpoint",
-        str(checkpoint_path),
-        "--input-a-dir",
-        str(repo_root / str(domain_a_test)),
-        "--input-b-dir",
-        str(repo_root / str(domain_b_test)),
-        "--generated-a-dir",
-        str(eval_dir / "generated_A"),
-        "--generated-b-dir",
-        str(eval_dir / "generated_B"),
-        "--real-a-dir",
-        str(repo_root / str(domain_a_test)),
-        "--real-b-dir",
-        str(repo_root / str(domain_b_test)),
-        "--model-type",
-        "gan",
-        "--image-size",
-        str(int(data_cfg.get("image_size", 128))),
-        "--allow-nonempty-generated-dir",
-        "--out-json",
-        str(eval_dir),
-    ]
-    if max_images is not None:
-        cmd.extend(["--max-images", str(int(max_images))])
-
     try:
-        subprocess.run(cmd, check=True)
+        payload = evaluate_bidirectional_generators(
+            g_ab=g_ab,
+            g_ba=g_ba,
+            input_a_dir=repo_root / str(domain_a_test),
+            input_b_dir=repo_root / str(domain_b_test),
+            generated_a_dir=eval_dir / "generated_A",
+            generated_b_dir=eval_dir / "generated_B",
+            real_a_dir=repo_root / str(domain_a_test),
+            real_b_dir=repo_root / str(domain_b_test),
+            image_size=int(data_cfg.get("image_size", 128)),
+            batch_size=16,  # Match evaluate.py CLI default to keep behavior unchanged.
+            max_images=max_images,
+            use_cuda=torch.cuda.is_available(),
+            out_json=eval_dir,
+            checkpoint_path=checkpoint_path,
+            config_used=cfg,
+        )
     except Exception as exc:
         print(f"Per-epoch eval failed for epoch {epoch}: {exc}", flush=True)
         return None
 
-    eval_files = sorted(eval_dir.glob("eval_*.json"), key=lambda p: p.stat().st_mtime)
-    if not eval_files:
-        print(f"Per-epoch eval did not produce an eval_*.json file for epoch {epoch}.", flush=True)
-        return None
-
     try:
-        payload = json.loads(eval_files[-1].read_text(encoding="utf-8"))
         score = payload.get("gms_avg")
         if score is None:
             return None
@@ -169,6 +192,7 @@ def main():
     lr_g = float(train_cfg.get("lr_g", 0.0002))
     lr_d = float(train_cfg.get("lr_d", 0.0002))
     betas = (float(train_cfg.get("beta1", 0.5)), float(train_cfg.get("beta2", 0.999)))
+    n_epochs = int(args.epochs or train_cfg.get("epochs", 100))
 
     optim_g = torch.optim.Adam(
         list(g_ab.parameters()) + list(g_ba.parameters()),
@@ -178,6 +202,18 @@ def main():
     optim_d_a = torch.optim.Adam(d_a.parameters(), lr=lr_d, betas=betas)
     optim_d_b = torch.optim.Adam(d_b.parameters(), lr=lr_d, betas=betas)
 
+    lr_schedule = str(train_cfg.get("lr_schedule", "linear_decay")).strip().lower()
+    lr_decay_start_epoch = int(train_cfg.get("lr_decay_start_epoch", max(1, n_epochs // 2)))
+    sched_g = None
+    sched_d_a = None
+    sched_d_b = None
+    if lr_schedule == "linear_decay":
+        sched_g = _build_linear_decay_scheduler(optim_g, n_epochs, lr_decay_start_epoch)
+        sched_d_a = _build_linear_decay_scheduler(optim_d_a, n_epochs, lr_decay_start_epoch)
+        sched_d_b = _build_linear_decay_scheduler(optim_d_b, n_epochs, lr_decay_start_epoch)
+    elif lr_schedule not in {"", "none"}:
+        raise ValueError(f"Unsupported lr_schedule: {lr_schedule}")
+
     l1 = nn.L1Loss()
     mse = nn.MSELoss()
 
@@ -186,7 +222,10 @@ def main():
     lambda_identity_a = float(loss_cfg.get("lambda_identity_a", 5.0))
     lambda_identity_b = float(loss_cfg.get("lambda_identity_b", 5.0))
 
-    n_epochs = int(args.epochs or train_cfg.get("epochs", 100))
+    replay_buffer_size = int(train_cfg.get("replay_buffer_size", 0))
+    fake_a_buffer = ReplayBuffer(replay_buffer_size)
+    fake_b_buffer = ReplayBuffer(replay_buffer_size)
+
     log_every_steps = int(train_cfg.get("log_every_steps", 50))
     select_best_by = str(train_cfg.get("select_best_by", "eval_gms")).strip().lower()
     best_eval_every_epochs = max(1, int(train_cfg.get("best_eval_every_epochs", 1)))
@@ -263,7 +302,8 @@ def main():
             # -------------------------
             optim_d_a.zero_grad(set_to_none=True)
             pred_real_a = d_a(real_a)
-            pred_fake_a_detached = d_a(fake_a.detach())
+            fake_a_for_d = fake_a_buffer.push_and_pop(fake_a)
+            pred_fake_a_detached = d_a(fake_a_for_d.detach())
             d_a_real_loss = _mse_gan_loss(pred_real_a, target_is_real=True, mse=mse)
             d_a_fake_loss = _mse_gan_loss(pred_fake_a_detached, target_is_real=False, mse=mse)
             d_a_loss = 0.5 * (d_a_real_loss + d_a_fake_loss)
@@ -275,7 +315,8 @@ def main():
             # -------------------------
             optim_d_b.zero_grad(set_to_none=True)
             pred_real_b = d_b(real_b)
-            pred_fake_b_detached = d_b(fake_b.detach())
+            fake_b_for_d = fake_b_buffer.push_and_pop(fake_b)
+            pred_fake_b_detached = d_b(fake_b_for_d.detach())
             d_b_real_loss = _mse_gan_loss(pred_real_b, target_is_real=True, mse=mse)
             d_b_fake_loss = _mse_gan_loss(pred_fake_b_detached, target_is_real=False, mse=mse)
             d_b_loss = 0.5 * (d_b_real_loss + d_b_fake_loss)
@@ -314,8 +355,8 @@ def main():
             "id_b": f"{running['id_b'] / num_steps:.6f}",
             "d_a_loss": f"{running['d_a_loss'] / num_steps:.6f}",
             "d_b_loss": f"{running['d_b_loss'] / num_steps:.6f}",
-            "lr_g": f"{lr_g:.8f}",
-            "lr_d": f"{lr_d:.8f}",
+            "lr_g": f"{optim_g.param_groups[0]['lr']:.8f}",
+            "lr_d": f"{optim_d_a.param_groups[0]['lr']:.8f}",
         }
         append_metrics_row(metrics_csv, epoch_row)
 
@@ -329,6 +370,9 @@ def main():
             "optim_g": optim_g.state_dict(),
             "optim_d_a": optim_d_a.state_dict(),
             "optim_d_b": optim_d_b.state_dict(),
+            "sched_g": sched_g.state_dict() if sched_g is not None else None,
+            "sched_d_a": sched_d_a.state_dict() if sched_d_a is not None else None,
+            "sched_d_b": sched_d_b.state_dict() if sched_d_b is not None else None,
             "metrics": epoch_row,
         }
         final_payload = ckpt_payload
@@ -345,6 +389,8 @@ def main():
                 cfg=cfg,
                 checkpoint_path=candidate_ckpt,
                 epoch=epoch,
+                g_ab=g_ab,
+                g_ba=g_ba,
                 max_images=best_eval_max_images,
             )
             score_name = best_score_name if score is not None else None
@@ -368,6 +414,11 @@ def main():
             flush=True,
         )
 
+        if sched_g is not None:
+            sched_g.step()
+            sched_d_a.step()
+            sched_d_b.step()
+
     if final_payload is None:
         final_payload = {
             "epoch": 0,
@@ -379,6 +430,9 @@ def main():
             "optim_g": optim_g.state_dict(),
             "optim_d_a": optim_d_a.state_dict(),
             "optim_d_b": optim_d_b.state_dict(),
+            "sched_g": sched_g.state_dict() if sched_g is not None else None,
+            "sched_d_a": sched_d_a.state_dict() if sched_d_a is not None else None,
+            "sched_d_b": sched_d_b.state_dict() if sched_d_b is not None else None,
             "metrics": {},
         }
     if not has_best_checkpoint:

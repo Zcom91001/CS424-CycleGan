@@ -183,6 +183,61 @@ def _generate_images_from_checkpoint(
     }
 
 
+def _generate_images_from_model(
+    model,
+    input_dir,
+    generated_dir,
+    image_size,
+    batch_size,
+    max_images,
+    device=None,
+    generator_key=None,
+):
+    input_dir = Path(input_dir).resolve()
+    generated_dir = Path(generated_dir).resolve()
+
+    if not input_dir.exists():
+        raise FileNotFoundError(f"Input folder does not exist: {input_dir}")
+
+    input_images = _list_images(input_dir)
+    if len(input_images) == 0:
+        raise ValueError(f"No images found in input folder: {input_dir}")
+    if max_images is not None:
+        input_images = input_images[: int(max_images)]
+
+    if device is None:
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    total = len(input_images)
+    was_training = model.training
+    model.eval()
+    try:
+        with torch.inference_mode():
+            for start in range(0, total, int(batch_size)):
+                batch_paths = input_images[start : start + int(batch_size)]
+                batch_tensors = []
+                for p in batch_paths:
+                    with Image.open(p) as img:
+                        batch_tensors.append(_pil_to_tensor_rgb(img, image_size=image_size))
+                x_in = torch.stack(batch_tensors, dim=0).to(device)
+                out_batch = model(x_in)
+
+                for src_path, out_tensor in zip(batch_paths, out_batch):
+                    out_path = generated_dir / f"{src_path.stem}.png"
+                    tensor_to_pil(out_tensor).save(out_path)
+    finally:
+        model.train(was_training)
+
+    return {
+        "generated_count": len(input_images),
+        "generator_key": generator_key,
+    }
+
+
 def _compute_metrics_for_dirs(generated_dir, real_dir, use_cuda):
     generated_dir = Path(generated_dir).resolve()
     real_dir = Path(real_dir).resolve()
@@ -224,6 +279,79 @@ def _compute_metrics_for_dirs(generated_dir, real_dir, use_cuda):
         "is_std": is_std,
         "gms": gms_score,
     }
+
+
+def _save_eval_json(out_json, payload):
+    out_json = Path(out_json)
+    if out_json.exists() and out_json.is_dir():
+        out_json = out_json / f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    elif out_json.suffix.lower() != ".json":
+        out_json = out_json / f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    else:
+        out_json = out_json.parent / f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return out_json
+
+
+def evaluate_bidirectional_generators(
+    g_ab,
+    g_ba,
+    input_a_dir,
+    input_b_dir,
+    generated_a_dir,
+    generated_b_dir,
+    real_a_dir,
+    real_b_dir,
+    image_size,
+    batch_size=16,
+    max_images=None,
+    use_cuda=None,
+    out_json=None,
+    checkpoint_path=None,
+    config_used=None,
+):
+    if use_cuda is None:
+        use_cuda = torch.cuda.is_available()
+
+    gen_a_info = _generate_images_from_model(
+        model=g_ba,
+        input_dir=input_b_dir,
+        generated_dir=generated_a_dir,
+        image_size=image_size,
+        batch_size=batch_size,
+        max_images=max_images,
+        generator_key="g_ba",
+    )
+    gen_b_info = _generate_images_from_model(
+        model=g_ab,
+        input_dir=input_a_dir,
+        generated_dir=generated_b_dir,
+        image_size=image_size,
+        batch_size=batch_size,
+        max_images=max_images,
+        generator_key="g_ab",
+    )
+
+    b2a_metrics = _compute_metrics_for_dirs(generated_a_dir, real_a_dir, use_cuda=use_cuda)
+    a2b_metrics = _compute_metrics_for_dirs(generated_b_dir, real_b_dir, use_cuda=use_cuda)
+
+    gms_values = [v for v in [b2a_metrics["gms"], a2b_metrics["gms"]] if v is not None]
+    gms_avg = round(sum(gms_values) / len(gms_values), 5) if gms_values else None
+
+    payload = {
+        "config_used": config_used,
+        "checkpoint": str(Path(checkpoint_path).resolve()) if checkpoint_path is not None else None,
+        "b2a": b2a_metrics,
+        "a2b": a2b_metrics,
+        "gms_avg": gms_avg,
+    }
+
+    if out_json is not None:
+        saved_json = _save_eval_json(out_json, payload)
+        print(f"saved_json={saved_json}")
+
+    return payload
 
 
 def main():

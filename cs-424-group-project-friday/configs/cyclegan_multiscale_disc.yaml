@@ -24,8 +24,10 @@ train:
   best_eval_every_epochs: 5
   lr_g: 0.0002
   lr_d: 0.0002
+  lr_schedule: linear_decay
   beta1: 0.5
   beta2: 0.999
+  replay_buffer_size: 50
   save_every: 5
 loss:
   lambda_cycle_a: 15.0
