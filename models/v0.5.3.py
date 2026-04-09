@@ -280,7 +280,7 @@ def main():
     real_label = 0.9
     fake_label = 0.1
 
-    n_critics = 2
+    n_critics = 5
     n_epoches   = 30
     decay_epoch = n_epoches // 2
 
@@ -323,7 +323,7 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    batch_size = 4
+    batch_size = 2
 
     trainloader = DataLoader(
         ImageDataset(data_dir, mode='train', transform=train_transforms),
@@ -367,9 +367,9 @@ def main():
         return loss / len(real_features)
 
     def identity_weight(epoch):
-        if epoch >= n_epoches // 4:
+        if epoch >= n_epoches // 5:
             return 0.0
-        return 1.0 * (1.0 - epoch / (n_epoches // 4))
+        return 1.0 * (1.0 - epoch / (n_epoches // 5))
 
     for epoch in range(n_epoches):
         lambda_identity = identity_weight(epoch)   # Fix #10

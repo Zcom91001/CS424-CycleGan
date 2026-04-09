@@ -41,9 +41,7 @@ random.seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-data_dir = "C:/Users/dan_t/OneDrive/Desktop/CS424"
-if platform.system() != "Windows":
-    data_dir = "/common/home/users/d/daniel.tan.2023/scratchDirectory"
+data_dir = "/common/home/users/d/daniel.tan.2023/scratchDirectory"
 
 # ── Replay Buffer ─────────────────────────────────────────────────────────────
 class ReplayBuffer:
@@ -281,7 +279,7 @@ def main():
     fake_label = 0.1
 
     n_critics = 2
-    n_epoches   = 30
+    n_epoches   = 200
     decay_epoch = n_epoches // 2
 
     # Fix #7: linear LR decay from epoch 50 → 100
@@ -307,13 +305,8 @@ def main():
     # Fix #9: random horizontal flip to double effective dataset size (200 → ~400 effective)
     train_transforms = transforms.Compose([
         transforms.Resize(image_size),
-        transforms.RandomHorizontalFlip(p=0.1),
-        transforms.RandomApply([
-            transforms.RandomChoice([
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                transforms.RandomCrop(image_size[0], padding=4, padding_mode='reflect'),
-            ])
-        ], p=0.8),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomCrop(image_size[0], padding=4, padding_mode='reflect'),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -323,7 +316,7 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    batch_size = 4
+    batch_size = 1
 
     trainloader = DataLoader(
         ImageDataset(data_dir, mode='train', transform=train_transforms),
@@ -337,8 +330,8 @@ def main():
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     # Loss weights
-    lambda_cycle = 20   # cycle-consistency
-    lambda_GAN   = 2    # adversarial
+    lambda_cycle = 5   # cycle-consistency
+    lambda_GAN   = 10    # adversarial
     lambda_feat = 5
 
     # Fix #10: identity loss weight schedule
@@ -367,18 +360,67 @@ def main():
         return loss / len(real_features)
 
     def identity_weight(epoch):
-        if epoch >= n_epoches // 4:
+        if epoch >= n_epoches // 5:
             return 0.0
-        return 1.0 * (1.0 - epoch / (n_epoches // 4))
+        return 1.0 * (1.0 - epoch / (n_epoches // 5))
+
+    # Periodic test-set GMS evaluation helpers
+    to_image = transforms.ToPILImage()
+
+    def generate_and_save_periodic(generator, test_dir, save_dir):
+        files = [os.path.join(test_dir, n) for n in os.listdir(test_dir)]
+        os.makedirs(save_dir, exist_ok=True)
+        for n in os.listdir(save_dir):
+            if n.lower().endswith((".png", ".jpg", ".jpeg")):
+                os.remove(os.path.join(save_dir, n))
+        generator.eval()
+        with torch.no_grad():
+            for i in range(0, len(files), batch_size):
+                imgs = []
+                batch_files = files[i: i + batch_size]
+                for path in batch_files:
+                    imgs.append(eval_transforms(Image.open(path).convert("RGB")))
+                imgs = torch.stack(imgs).type(Tensor)
+                fakes = generator(imgs).cpu()
+                for j, fake in enumerate(fakes):
+                    arr = fake.permute(1, 2, 0).numpy()
+                    arr = np.clip((arr + 1.0) * 127.5, 0, 255).astype(np.uint8)
+                    _, name = os.path.split(batch_files[j])
+                    stem, _ = os.path.splitext(name)
+                    to_image(arr).save(os.path.join(save_dir, f"{stem}.png"), format="PNG")
+
+    def score_periodic(save_dir, gt_dir, label):
+        metrics = torch_fidelity.calculate_metrics(
+            input1=save_dir, input2=gt_dir, cuda=cuda, fid=True, isc=True)
+        fid, isc = metrics["frechet_inception_distance"], metrics["inception_score_mean"]
+        if isc > 0:
+            s = np.sqrt(fid / isc)
+            print(f"Geometric Mean Score ({label}): {s:.5f}")
+            return s
+        print(f"IS is 0 for {label}, GMS cannot be computed!")
+        return None
+
+    best_test_gms = float("inf")
+    best_test_epoch = -1
+    best_test_ckpt = os.path.join(model_dir, "best_test_gms_ckpt.pt")
 
     for epoch in range(n_epoches):
         lambda_identity = identity_weight(epoch)   # Fix #10
+        g_total_sum = 0.0
+        g_id_sum = 0.0
+        g_gan_sum = 0.0
+        g_cycle_sum = 0.0
+        g_feat_sum = 0.0
+        d_a_sum = 0.0
+        d_b_sum = 0.0
+        g_steps = 0
+        d_steps = 0
 
         for i, (real_A, real_B) in enumerate(trainloader):
             real_A = real_A.type(Tensor)
             real_B = real_B.type(Tensor)
 
-            # ── Train Discriminators TWICE every step ─────────────────────
+            # Train Discriminators TWICE every step
             for _ in range(n_critics):
                 with torch.no_grad():
                     fake_A_buf = fake_A_buffer.push_and_pop(G_BA(real_B).detach())
@@ -393,6 +435,7 @@ def main():
                 loss_D_A.backward()
                 nn.utils.clip_grad_norm_(D_A.parameters(), max_norm=1.0)
                 optimizer_D_A.step()
+                d_a_sum += loss_D_A.item()
 
                 optimizer_D_B.zero_grad()
                 pred_real_B = D_B(real_B)
@@ -403,8 +446,10 @@ def main():
                 loss_D_B.backward()
                 nn.utils.clip_grad_norm_(D_B.parameters(), max_norm=1.0)
                 optimizer_D_B.step()
+                d_b_sum += loss_D_B.item()
+                d_steps += 1
 
-            # ── Train Generators ONCE every step ──────────────────────────
+            # Train Generators ONCE every step
             G_AB.train(); G_BA.train()
             optimizer_G.zero_grad()
 
@@ -417,7 +462,7 @@ def main():
 
             loss_GAN_AB = criterion_GAN(D_B(fake_B_img), torch.ones_like(D_B(fake_B_img)) * real_label)
             loss_GAN_BA = criterion_GAN(D_A(fake_A_img), torch.ones_like(D_A(fake_A_img)) * real_label)
-            loss_GAN    = (loss_GAN_AB + loss_GAN_BA) / 2
+            loss_GAN = (loss_GAN_AB + loss_GAN_BA) / 2
 
             recov_A = G_BA(fake_B_img)
             recov_B = G_AB(fake_A_img)
@@ -435,41 +480,91 @@ def main():
             nn.utils.clip_grad_norm_(
                 list(G_AB.parameters()) + list(G_BA.parameters()), max_norm=1.0)
             optimizer_G.step()
+            g_total_sum += loss_G.item()
+            g_id_sum += loss_identity.item()
+            g_gan_sum += loss_GAN.item()
+            g_cycle_sum += loss_cycle.item()
+            g_feat_sum += loss_feat.item()
+            g_steps += 1
 
         scheduler_G.step()
         scheduler_D_A.step()
         scheduler_D_B.step()
 
-        loss_D = (loss_D_A + loss_D_B) / 2
-        print(f'[Epoch {epoch+1:3d}/{n_epoches}] λ_id={lambda_identity:.2f}')
-        print(f'  G  : total={loss_G.item():.4f}  id={loss_identity.item():.4f}'
-                f'  GAN={loss_GAN.item():.4f}  cycle={loss_cycle.item():.4f}'
-                f'  feat={loss_feat.item():.4f}')  # added
-        print(f'  D  : total={loss_D.item():.4f}  D_A={loss_D_A.item():.4f}'
-                f'  D_B={loss_D_B.item():.4f}')
+        g_total_mean = g_total_sum / max(1, g_steps)
+        g_id_mean = g_id_sum / max(1, g_steps)
+        g_gan_mean = g_gan_sum / max(1, g_steps)
+        g_cycle_mean = g_cycle_sum / max(1, g_steps)
+        g_feat_mean = g_feat_sum / max(1, g_steps)
+        d_a_mean = d_a_sum / max(1, d_steps)
+        d_b_mean = d_b_sum / max(1, d_steps)
+        d_total_mean = (d_a_mean + d_b_mean) / 2
 
-            # Fix #11: save checkpoints so training can be resumed if interrupted
-            # ckpt = {
-            #     'epoch':       epoch + 1,
-            #     'G_AB':        G_AB.state_dict(),
-            #     'G_BA':        G_BA.state_dict(),
-            #     'D_A':         D_A.state_dict(),
-            #     'D_B':         D_B.state_dict(),
-            #     'opt_G':       optimizer_G.state_dict(),
-            #     'opt_D_A':     optimizer_D_A.state_dict(),
-            #     'opt_D_B':     optimizer_D_B.state_dict(),
-            #     'sched_G':     scheduler_G.state_dict(),
-            #     'sched_D_A':   scheduler_D_A.state_dict(),
-            #     'sched_D_B':   scheduler_D_B.state_dict(),
-            # }
-            # torch.save(ckpt, os.path.join(model_dir, f'ckpt_epoch{epoch+1:03d}.pt'))
+        print(f'[Epoch {epoch+1:3d}/{n_epoches}] lambda_id={lambda_identity:.2f}')
+        print(f'  G  : total={g_total_mean:.4f}  id={g_id_mean:.4f}'
+              f'  GAN={g_gan_mean:.4f}  cycle={g_cycle_mean:.4f}'
+              f'  feat={g_feat_mean:.4f}')
+        print(f'  D  : total={d_total_mean:.4f}  D_A={d_a_mean:.4f}'
+              f'  D_B={d_b_mean:.4f}')
 
+        if (epoch + 1) % 10 == 0:
+            generate_and_save_periodic(
+                G_AB,
+                os.path.join(data_dir, 'VAE_generation/test'),
+                os.path.join(model_dir, 'generated_B_images')
+            )
+            s1 = score_periodic(
+                os.path.join(model_dir, 'generated_B_images'),
+                os.path.join(data_dir, 'VAE_generation1/test'),
+                'A->B'
+            )
+
+            generate_and_save_periodic(
+                G_BA,
+                os.path.join(data_dir, 'VAE_generation1/test'),
+                os.path.join(model_dir, 'generated_A_images')
+            )
+            s2 = score_periodic(
+                os.path.join(model_dir, 'generated_A_images'),
+                os.path.join(data_dir, 'VAE_generation/test'),
+                'B->A'
+            )
+
+            if s1 is not None and s2 is not None:
+                test_gms = np.round((s1 + s2) / 2, 5)
+                print(f'  Test GMS @epoch {epoch+1}: {test_gms:.5f}')
+
+                if test_gms < best_test_gms:
+                    best_test_gms = test_gms
+                    best_test_epoch = epoch + 1
+                    ckpt = {
+                        'epoch': epoch + 1,
+                        'G_AB': G_AB.state_dict(),
+                        'G_BA': G_BA.state_dict(),
+                        'D_A': D_A.state_dict(),
+                        'D_B': D_B.state_dict(),
+                        'opt_G': optimizer_G.state_dict(),
+                        'opt_D_A': optimizer_D_A.state_dict(),
+                        'opt_D_B': optimizer_D_B.state_dict(),
+                        'sched_G': scheduler_G.state_dict(),
+                        'sched_D_A': scheduler_D_A.state_dict(),
+                        'sched_D_B': scheduler_D_B.state_dict(),
+                        'best_test_gms': best_test_gms,
+                    }
+                    torch.save(ckpt, best_test_ckpt)
+                    print(f'  New best test GMS: {best_test_gms:.5f} at epoch {best_test_epoch} ({best_test_ckpt})')
+
+    if best_test_epoch > 0:
+        print(f'Best test GMS checkpoint: epoch={best_test_epoch}, gms={best_test_gms:.5f}, path={best_test_ckpt}')
     # ── Evaluation ────────────────────────────────────────────────────────────
     to_image = transforms.ToPILImage()
 
     def generate_and_save(generator, test_dir, save_dir):
         files = [os.path.join(test_dir, n) for n in os.listdir(test_dir)]
         os.makedirs(save_dir, exist_ok=True)
+        for n in os.listdir(save_dir):
+            if n.lower().endswith((".png", ".jpg", ".jpeg")):
+                os.remove(os.path.join(save_dir, n))
         generator.eval()
         with torch.no_grad():
             for i in range(0, len(files), batch_size):
@@ -481,9 +576,10 @@ def main():
                 fakes = generator(imgs).cpu()
                 for j, fake in enumerate(fakes):
                     arr = fake.permute(1, 2, 0).numpy()
-                    arr = ((arr - arr.min()) * 255 / (arr.max() - arr.min())).astype(np.uint8)
+                    arr = np.clip((arr + 1.0) * 127.5, 0, 255).astype(np.uint8)
                     _, name = os.path.split(batch_files[j])
-                    to_image(arr).save(os.path.join(save_dir, name))
+                    stem, _ = os.path.splitext(name)
+                    to_image(arr).save(os.path.join(save_dir, f"{stem}.png"), format="PNG")
 
     def score(save_dir, gt_dir, label):
         metrics   = torch_fidelity.calculate_metrics(
@@ -520,13 +616,17 @@ def main():
         'B→A'
     )
 
-    if s1 is not None and s2 is not None:
+    csv_path = os.path.join(model_dir, "Userid.csv")
+    if best_test_epoch > 0:
+        s_value = np.round(best_test_gms, 5)
+        df = pd.DataFrame({'id': [1], 'label': [s_value]})
+        df.to_csv(csv_path, index=False)
+        print(f"Saved best periodic test GMS ({s_value}) from epoch {best_test_epoch} to {csv_path}")
+    elif s1 is not None and s2 is not None:
         s_value = np.round((s1 + s2) / 2, 5)
-        df      = pd.DataFrame({'id': [1], 'label': [s_value]})
-        csv_path = os.path.join(model_dir, "Userid.csv")
+        df = pd.DataFrame({'id': [1], 'label': [s_value]})
         df.to_csv(csv_path, index=False)
         print(f"Final score: {s_value}  —  saved to {csv_path}")
-
 
 if __name__ == "__main__":
     main()

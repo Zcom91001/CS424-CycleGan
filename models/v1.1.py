@@ -41,9 +41,7 @@ random.seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-data_dir = "C:/Users/dan_t/OneDrive/Desktop/CS424"
-if platform.system() != "Windows":
-    data_dir = "/common/home/users/d/daniel.tan.2023/scratchDirectory"
+data_dir = "/common/home/projectgrps/CS424/CS424G6/scratchDirectory"
 
 # ── Replay Buffer ─────────────────────────────────────────────────────────────
 class ReplayBuffer:
@@ -281,7 +279,7 @@ def main():
     fake_label = 0.1
 
     n_critics = 2
-    n_epoches   = 30
+    n_epoches   = 200
     decay_epoch = n_epoches // 2
 
     # Fix #7: linear LR decay from epoch 50 → 100
@@ -305,15 +303,9 @@ def main():
     image_size = (256, 256)
 
     # Fix #9: random horizontal flip to double effective dataset size (200 → ~400 effective)
+    # Keep loader transforms deterministic; stochastic augmentation is D-only below.
     train_transforms = transforms.Compose([
         transforms.Resize(image_size),
-        transforms.RandomHorizontalFlip(p=0.1),
-        transforms.RandomApply([
-            transforms.RandomChoice([
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                transforms.RandomCrop(image_size[0], padding=4, padding_mode='reflect'),
-            ])
-        ], p=0.8),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -323,7 +315,7 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    batch_size = 4
+    batch_size = 1
 
     trainloader = DataLoader(
         ImageDataset(data_dir, mode='train', transform=train_transforms),
@@ -367,9 +359,9 @@ def main():
         return loss / len(real_features)
 
     def identity_weight(epoch):
-        if epoch >= n_epoches // 4:
+        if epoch >= n_epoches // 5:
             return 0.0
-        return 1.0 * (1.0 - epoch / (n_epoches // 4))
+        return 1.0 * (1.0 - epoch / (n_epoches // 5))
 
     for epoch in range(n_epoches):
         lambda_identity = identity_weight(epoch)   # Fix #10
@@ -384,20 +376,39 @@ def main():
                     fake_A_buf = fake_A_buffer.push_and_pop(G_BA(real_B).detach())
                     fake_B_buf = fake_B_buffer.push_and_pop(G_AB(real_A).detach())
 
+                # Sample augmentation params ONCE per D step
+                do_flip = random.random() < 0.5
+                i_A, j_A, h_A, w_A = transforms.RandomCrop.get_params(real_A, output_size=(248, 248))
+                i_B, j_B, h_B, w_B = transforms.RandomCrop.get_params(real_B, output_size=(248, 248))
+
+                def aug_A(x):
+                    if do_flip:
+                        x = transforms.functional.hflip(x)
+                    x = transforms.functional.crop(x, i_A, j_A, h_A, w_A)
+                    return transforms.functional.resize(x, [256, 256])
+
+                def aug_B(x):
+                    if do_flip:
+                        x = transforms.functional.hflip(x)
+                    x = transforms.functional.crop(x, i_B, j_B, h_B, w_B)
+                    return transforms.functional.resize(x, [256, 256])
+
+                # D_A: same params for real_A and fake_A_buf
                 optimizer_D_A.zero_grad()
-                pred_real_A = D_A(real_A)
+                pred_real_A = D_A(aug_A(real_A))
                 loss_real_A = criterion_GAN(pred_real_A, torch.ones_like(pred_real_A) * real_label)
-                pred_fake_A = D_A(fake_A_buf)
+                pred_fake_A = D_A(aug_A(fake_A_buf))
                 loss_fake_A = criterion_GAN(pred_fake_A, torch.zeros_like(pred_fake_A) + fake_label)
                 loss_D_A = (loss_real_A + loss_fake_A) / 2
                 loss_D_A.backward()
                 nn.utils.clip_grad_norm_(D_A.parameters(), max_norm=1.0)
                 optimizer_D_A.step()
 
+                # D_B: same params for real_B and fake_B_buf
                 optimizer_D_B.zero_grad()
-                pred_real_B = D_B(real_B)
+                pred_real_B = D_B(aug_B(real_B))
                 loss_real_B = criterion_GAN(pred_real_B, torch.ones_like(pred_real_B) * real_label)
-                pred_fake_B = D_B(fake_B_buf)
+                pred_fake_B = D_B(aug_B(fake_B_buf))
                 loss_fake_B = criterion_GAN(pred_fake_B, torch.zeros_like(pred_fake_B) + fake_label)
                 loss_D_B = (loss_real_B + loss_fake_B) / 2
                 loss_D_B.backward()
@@ -481,7 +492,7 @@ def main():
                 fakes = generator(imgs).cpu()
                 for j, fake in enumerate(fakes):
                     arr = fake.permute(1, 2, 0).numpy()
-                    arr = ((arr - arr.min()) * 255 / (arr.max() - arr.min())).astype(np.uint8)
+                    arr = np.clip((arr + 1.0) * 127.5, 0, 255).astype(np.uint8)
                     _, name = os.path.split(batch_files[j])
                     to_image(arr).save(os.path.join(save_dir, name))
 

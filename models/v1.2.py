@@ -41,9 +41,7 @@ random.seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-data_dir = "C:/Users/dan_t/OneDrive/Desktop/CS424"
-if platform.system() != "Windows":
-    data_dir = "/common/home/users/d/daniel.tan.2023/scratchDirectory"
+data_dir = "/common/home/projectgrps/CS424/CS424G6/scratchDirectory"
 
 # ── Replay Buffer ─────────────────────────────────────────────────────────────
 class ReplayBuffer:
@@ -281,7 +279,7 @@ def main():
     fake_label = 0.1
 
     n_critics = 2
-    n_epoches   = 30
+    n_epoches   = 200
     decay_epoch = n_epoches // 2
 
     # Fix #7: linear LR decay from epoch 50 → 100
@@ -323,7 +321,7 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    batch_size = 4
+    batch_size = 1
 
     trainloader = DataLoader(
         ImageDataset(data_dir, mode='train', transform=train_transforms),
@@ -337,8 +335,8 @@ def main():
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     # Loss weights
-    lambda_cycle = 20   # cycle-consistency
-    lambda_GAN   = 2    # adversarial
+    lambda_cycle = 10   # cycle-consistency
+    lambda_GAN   = 5    # adversarial
     lambda_feat = 5
 
     # Fix #10: identity loss weight schedule
@@ -367,9 +365,9 @@ def main():
         return loss / len(real_features)
 
     def identity_weight(epoch):
-        if epoch >= n_epoches // 4:
+        if epoch >= n_epoches // 5:
             return 0.0
-        return 1.0 * (1.0 - epoch / (n_epoches // 4))
+        return 1.0 * (1.0 - epoch / (n_epoches // 5))
 
     for epoch in range(n_epoches):
         lambda_identity = identity_weight(epoch)   # Fix #10

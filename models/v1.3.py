@@ -41,9 +41,7 @@ random.seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-data_dir = "C:/Users/dan_t/OneDrive/Desktop/CS424"
-if platform.system() != "Windows":
-    data_dir = "/common/home/users/d/daniel.tan.2023/scratchDirectory"
+data_dir = "/common/home/projectgrps/CS424/CS424G6/scratchDirectory"
 
 # ── Replay Buffer ─────────────────────────────────────────────────────────────
 class ReplayBuffer:
@@ -281,7 +279,7 @@ def main():
     fake_label = 0.1
 
     n_critics = 2
-    n_epoches   = 30
+    n_epoches   = 200
     decay_epoch = n_epoches // 2
 
     # Fix #7: linear LR decay from epoch 50 → 100
@@ -307,13 +305,7 @@ def main():
     # Fix #9: random horizontal flip to double effective dataset size (200 → ~400 effective)
     train_transforms = transforms.Compose([
         transforms.Resize(image_size),
-        transforms.RandomHorizontalFlip(p=0.1),
-        transforms.RandomApply([
-            transforms.RandomChoice([
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                transforms.RandomCrop(image_size[0], padding=4, padding_mode='reflect'),
-            ])
-        ], p=0.8),
+        transforms.RandomHorizontalFlip(p=0.5),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -323,7 +315,7 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    batch_size = 4
+    batch_size = 1
 
     trainloader = DataLoader(
         ImageDataset(data_dir, mode='train', transform=train_transforms),
@@ -337,9 +329,14 @@ def main():
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     # Loss weights
-    lambda_cycle = 20   # cycle-consistency
-    lambda_GAN   = 2    # adversarial
-    lambda_feat = 5
+    lambda_cycle = 10   # cycle-consistency
+    lambda_GAN   = 3    # adversarial
+    lambda_feat = 3
+    checkpoint_interval = 10
+
+    best_val_metric = float("inf")
+    best_epoch = -1
+    best_ckpt_path = os.path.join(model_dir, "best_ckpt.pt")
 
     # Fix #10: identity loss weight schedule
     # Starts at 5 (= 0.5 × lambda_cycle, as in the paper) to warm-start colour mapping,
@@ -367,18 +364,69 @@ def main():
         return loss / len(real_features)
 
     def identity_weight(epoch):
-        if epoch >= n_epoches // 4:
+        if epoch >= n_epoches // 5:
             return 0.0
-        return 1.0 * (1.0 - epoch / (n_epoches // 4))
+        return 1.0 * (1.0 - epoch / (n_epoches // 5))
+
+    def validate_generator_objective(lambda_identity):
+        G_AB.eval(); G_BA.eval()
+        D_A.eval(); D_B.eval()
+
+        val_total = 0.0
+        val_count = 0
+        with torch.no_grad():
+            for real_A, real_B in validloader:
+                real_A = real_A.type(Tensor)
+                real_B = real_B.type(Tensor)
+
+                fake_B_img = G_AB(real_A)
+                fake_A_img = G_BA(real_B)
+
+                loss_id_A = criterion_identity(G_BA(real_A), real_A)
+                loss_id_B = criterion_identity(G_AB(real_B), real_B)
+                loss_identity = (loss_id_A + loss_id_B) / 2
+
+                loss_GAN_AB = criterion_GAN(D_B(fake_B_img), torch.ones_like(D_B(fake_B_img)) * real_label)
+                loss_GAN_BA = criterion_GAN(D_A(fake_A_img), torch.ones_like(D_A(fake_A_img)) * real_label)
+                loss_GAN = (loss_GAN_AB + loss_GAN_BA) / 2
+
+                recov_A = G_BA(fake_B_img)
+                recov_B = G_AB(fake_A_img)
+                loss_cycle = (criterion_cycle(recov_A, real_A) + criterion_cycle(recov_B, real_B)) / 2
+
+                loss_feat_AB = feature_matching_loss(real_B, fake_B_img, D_B)
+                loss_feat_BA = feature_matching_loss(real_A, fake_A_img, D_A)
+                loss_feat = (loss_feat_AB + loss_feat_BA) / 2
+
+                loss_G = (lambda_identity * loss_identity
+                        + lambda_GAN     * loss_GAN
+                        + lambda_cycle   * loss_cycle
+                        + lambda_feat    * loss_feat)
+
+                val_total += loss_G.item()
+                val_count += 1
+
+        G_AB.train(); G_BA.train()
+        D_A.train(); D_B.train()
+        return val_total / max(1, val_count)
 
     for epoch in range(n_epoches):
         lambda_identity = identity_weight(epoch)   # Fix #10
+        g_total_sum = 0.0
+        g_id_sum = 0.0
+        g_gan_sum = 0.0
+        g_cycle_sum = 0.0
+        g_feat_sum = 0.0
+        d_a_sum = 0.0
+        d_b_sum = 0.0
+        g_steps = 0
+        d_steps = 0
 
         for i, (real_A, real_B) in enumerate(trainloader):
             real_A = real_A.type(Tensor)
             real_B = real_B.type(Tensor)
 
-            # ── Train Discriminators TWICE every step ─────────────────────
+            # Train Discriminators TWICE every step
             for _ in range(n_critics):
                 with torch.no_grad():
                     fake_A_buf = fake_A_buffer.push_and_pop(G_BA(real_B).detach())
@@ -393,6 +441,7 @@ def main():
                 loss_D_A.backward()
                 nn.utils.clip_grad_norm_(D_A.parameters(), max_norm=1.0)
                 optimizer_D_A.step()
+                d_a_sum += loss_D_A.item()
 
                 optimizer_D_B.zero_grad()
                 pred_real_B = D_B(real_B)
@@ -403,8 +452,10 @@ def main():
                 loss_D_B.backward()
                 nn.utils.clip_grad_norm_(D_B.parameters(), max_norm=1.0)
                 optimizer_D_B.step()
+                d_b_sum += loss_D_B.item()
+                d_steps += 1
 
-            # ── Train Generators ONCE every step ──────────────────────────
+            # Train Generators ONCE every step
             G_AB.train(); G_BA.train()
             optimizer_G.zero_grad()
 
@@ -417,7 +468,7 @@ def main():
 
             loss_GAN_AB = criterion_GAN(D_B(fake_B_img), torch.ones_like(D_B(fake_B_img)) * real_label)
             loss_GAN_BA = criterion_GAN(D_A(fake_A_img), torch.ones_like(D_A(fake_A_img)) * real_label)
-            loss_GAN    = (loss_GAN_AB + loss_GAN_BA) / 2
+            loss_GAN = (loss_GAN_AB + loss_GAN_BA) / 2
 
             recov_A = G_BA(fake_B_img)
             recov_B = G_AB(fake_A_img)
@@ -435,41 +486,73 @@ def main():
             nn.utils.clip_grad_norm_(
                 list(G_AB.parameters()) + list(G_BA.parameters()), max_norm=1.0)
             optimizer_G.step()
+            g_total_sum += loss_G.item()
+            g_id_sum += loss_identity.item()
+            g_gan_sum += loss_GAN.item()
+            g_cycle_sum += loss_cycle.item()
+            g_feat_sum += loss_feat.item()
+            g_steps += 1
 
         scheduler_G.step()
         scheduler_D_A.step()
         scheduler_D_B.step()
 
-        loss_D = (loss_D_A + loss_D_B) / 2
-        print(f'[Epoch {epoch+1:3d}/{n_epoches}] λ_id={lambda_identity:.2f}')
-        print(f'  G  : total={loss_G.item():.4f}  id={loss_identity.item():.4f}'
-                f'  GAN={loss_GAN.item():.4f}  cycle={loss_cycle.item():.4f}'
-                f'  feat={loss_feat.item():.4f}')  # added
-        print(f'  D  : total={loss_D.item():.4f}  D_A={loss_D_A.item():.4f}'
-                f'  D_B={loss_D_B.item():.4f}')
+        g_total_mean = g_total_sum / max(1, g_steps)
+        g_id_mean = g_id_sum / max(1, g_steps)
+        g_gan_mean = g_gan_sum / max(1, g_steps)
+        g_cycle_mean = g_cycle_sum / max(1, g_steps)
+        g_feat_mean = g_feat_sum / max(1, g_steps)
+        d_a_mean = d_a_sum / max(1, d_steps)
+        d_b_mean = d_b_sum / max(1, d_steps)
+        d_total_mean = (d_a_mean + d_b_mean) / 2
 
-            # Fix #11: save checkpoints so training can be resumed if interrupted
-            # ckpt = {
-            #     'epoch':       epoch + 1,
-            #     'G_AB':        G_AB.state_dict(),
-            #     'G_BA':        G_BA.state_dict(),
-            #     'D_A':         D_A.state_dict(),
-            #     'D_B':         D_B.state_dict(),
-            #     'opt_G':       optimizer_G.state_dict(),
-            #     'opt_D_A':     optimizer_D_A.state_dict(),
-            #     'opt_D_B':     optimizer_D_B.state_dict(),
-            #     'sched_G':     scheduler_G.state_dict(),
-            #     'sched_D_A':   scheduler_D_A.state_dict(),
-            #     'sched_D_B':   scheduler_D_B.state_dict(),
-            # }
-            # torch.save(ckpt, os.path.join(model_dir, f'ckpt_epoch{epoch+1:03d}.pt'))
+        print(f'[Epoch {epoch+1:3d}/{n_epoches}] lambda_id={lambda_identity:.2f}')
+        print(f'  G  : total={g_total_mean:.4f}  id={g_id_mean:.4f}'
+              f'  GAN={g_gan_mean:.4f}  cycle={g_cycle_mean:.4f}'
+              f'  feat={g_feat_mean:.4f}')
+        print(f'  D  : total={d_total_mean:.4f}  D_A={d_a_mean:.4f}'
+              f'  D_B={d_b_mean:.4f}')
 
+        if (epoch + 1) % checkpoint_interval == 0:
+            val_metric = validate_generator_objective(lambda_identity)
+            ckpt = {
+                'epoch':       epoch + 1,
+                'G_AB':        G_AB.state_dict(),
+                'G_BA':        G_BA.state_dict(),
+                'D_A':         D_A.state_dict(),
+                'D_B':         D_B.state_dict(),
+                'opt_G':       optimizer_G.state_dict(),
+                'opt_D_A':     optimizer_D_A.state_dict(),
+                'opt_D_B':     optimizer_D_B.state_dict(),
+                'sched_G':     scheduler_G.state_dict(),
+                'sched_D_A':   scheduler_D_A.state_dict(),
+                'sched_D_B':   scheduler_D_B.state_dict(),
+                'val_metric':  val_metric,
+                'best_val_metric_so_far': best_val_metric,
+            }
+            ckpt_path = os.path.join(model_dir, f'ckpt_epoch{epoch+1:03d}.pt')
+            torch.save(ckpt, ckpt_path)
+            print(f'  Val: objective={val_metric:.4f}  saved={ckpt_path}')
+
+            if val_metric < best_val_metric:
+                best_val_metric = val_metric
+                best_epoch = epoch + 1
+                ckpt['best_val_metric_so_far'] = best_val_metric
+                ckpt['best_epoch_so_far'] = best_epoch
+                torch.save(ckpt, best_ckpt_path)
+                print(f'  New best checkpoint at epoch {best_epoch}: {best_ckpt_path}')
+
+    if best_epoch > 0:
+        print(f'Best checkpoint: epoch={best_epoch}, val_objective={best_val_metric:.4f}, path={best_ckpt_path}')
     # ── Evaluation ────────────────────────────────────────────────────────────
     to_image = transforms.ToPILImage()
 
     def generate_and_save(generator, test_dir, save_dir):
         files = [os.path.join(test_dir, n) for n in os.listdir(test_dir)]
         os.makedirs(save_dir, exist_ok=True)
+        for n in os.listdir(save_dir):
+            if n.lower().endswith((".png", ".jpg", ".jpeg")):
+                os.remove(os.path.join(save_dir, n))
         generator.eval()
         with torch.no_grad():
             for i in range(0, len(files), batch_size):
@@ -481,9 +564,10 @@ def main():
                 fakes = generator(imgs).cpu()
                 for j, fake in enumerate(fakes):
                     arr = fake.permute(1, 2, 0).numpy()
-                    arr = ((arr - arr.min()) * 255 / (arr.max() - arr.min())).astype(np.uint8)
+                    arr = np.clip((arr + 1.0) * 127.5, 0, 255).astype(np.uint8)
                     _, name = os.path.split(batch_files[j])
-                    to_image(arr).save(os.path.join(save_dir, name))
+                    stem, _ = os.path.splitext(name)
+                    to_image(arr).save(os.path.join(save_dir, f"{stem}.png"), format="PNG")
 
     def score(save_dir, gt_dir, label):
         metrics   = torch_fidelity.calculate_metrics(

@@ -22,7 +22,6 @@ import torch.nn as nn
 import torch_fidelity
 import numpy as np
 import pandas as pd
-import itertools
 import random
 import platform
 
@@ -271,8 +270,8 @@ def main():
     lr_G = 0.0002
     lr_D = 0.0001
 
-    optimizer_G   = torch.optim.Adam(
-        itertools.chain(G_AB.parameters(), G_BA.parameters()), lr=lr_G, betas=(0.5, 0.999))
+    optimizer_G_AB = torch.optim.Adam(G_AB.parameters(), lr=lr_G, betas=(0.5, 0.999))
+    optimizer_G_BA = torch.optim.Adam(G_BA.parameters(), lr=lr_G, betas=(0.5, 0.999))
     optimizer_D_A = torch.optim.Adam(D_A.parameters(), lr=lr_D, betas=(0.5, 0.999))
     optimizer_D_B = torch.optim.Adam(D_B.parameters(), lr=lr_D, betas=(0.5, 0.999))
 
@@ -280,7 +279,7 @@ def main():
     real_label = 0.9
     fake_label = 0.1
 
-    n_critics = 2
+    n_critics = 5
     n_epoches   = 30
     decay_epoch = n_epoches // 2
 
@@ -290,7 +289,8 @@ def main():
             return 1.0
         return max(0.0, 1.0 - (epoch - decay_epoch) / float(n_epoches - decay_epoch))
 
-    scheduler_G   = torch.optim.lr_scheduler.LambdaLR(optimizer_G,   lr_lambda)
+    scheduler_G_AB = torch.optim.lr_scheduler.LambdaLR(optimizer_G_AB, lr_lambda)
+    scheduler_G_BA = torch.optim.lr_scheduler.LambdaLR(optimizer_G_BA, lr_lambda)
     scheduler_D_A = torch.optim.lr_scheduler.LambdaLR(optimizer_D_A, lr_lambda)
     scheduler_D_B = torch.optim.lr_scheduler.LambdaLR(optimizer_D_B, lr_lambda)
 
@@ -308,11 +308,8 @@ def main():
     train_transforms = transforms.Compose([
         transforms.Resize(image_size),
         transforms.RandomHorizontalFlip(p=0.1),
-        transforms.RandomApply([
-            transforms.RandomChoice([
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                transforms.RandomCrop(image_size[0], padding=4, padding_mode='reflect'),
-            ])
+        transforms.RandomApply([   
+            transforms.RandomCrop(image_size[0], padding=4, padding_mode='reflect'),
         ], p=0.8),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -323,7 +320,7 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    batch_size = 4
+    batch_size = 1
 
     trainloader = DataLoader(
         ImageDataset(data_dir, mode='train', transform=train_transforms),
@@ -340,6 +337,12 @@ def main():
     lambda_cycle = 20   # cycle-consistency
     lambda_GAN   = 2    # adversarial
     lambda_feat = 5
+    g_ab_steps   = 2    # train G_AB twice per batch
+    g_ba_steps   = 1    # train G_BA once per batch
+
+    def set_requires_grad(model, flag):
+        for p in model.parameters():
+            p.requires_grad = flag
 
     # Fix #10: identity loss weight schedule
     # Starts at 5 (= 0.5 × lambda_cycle, as in the paper) to warm-start colour mapping,
@@ -369,7 +372,7 @@ def main():
     def identity_weight(epoch):
         if epoch >= n_epoches // 4:
             return 0.0
-        return 1.0 * (1.0 - epoch / (n_epoches // 4))
+        return 5.0 * (1.0 - epoch / (n_epoches // 4))
 
     for epoch in range(n_epoches):
         lambda_identity = identity_weight(epoch)   # Fix #10
@@ -406,37 +409,71 @@ def main():
 
             # ── Train Generators ONCE every step ──────────────────────────
             G_AB.train(); G_BA.train()
-            optimizer_G.zero_grad()
+            loss_G_AB_sum = 0.0
+            loss_G_BA_sum = 0.0
+            loss_feat_AB_sum = 0.0
+            loss_feat_BA_sum = 0.0
 
-            fake_B_img = G_AB(real_A)
-            fake_A_img = G_BA(real_B)
+            # Update G_AB (A -> B) multiple times
+            set_requires_grad(G_BA, False)
+            for _ in range(g_ab_steps):
+                optimizer_G_AB.zero_grad()
 
-            loss_id_A = criterion_identity(G_BA(real_A), real_A)
-            loss_id_B = criterion_identity(G_AB(real_B), real_B)
+                fake_B_img = G_AB(real_A)
+                recov_A = G_BA(fake_B_img)
+
+                loss_id_B = criterion_identity(G_AB(real_B), real_B)
+                loss_GAN_AB = criterion_GAN(D_B(fake_B_img), torch.ones_like(D_B(fake_B_img)) * real_label)
+                loss_cycle_AB = criterion_cycle(recov_A, real_A)
+                loss_feat_AB = feature_matching_loss(real_B, fake_B_img, D_B)
+
+                loss_G_AB = (lambda_identity * loss_id_B
+                        + lambda_GAN     * loss_GAN_AB
+                        + lambda_cycle   * loss_cycle_AB
+                        + lambda_feat    * loss_feat_AB)
+                loss_G_AB.backward()
+                nn.utils.clip_grad_norm_(G_AB.parameters(), max_norm=1.0)
+                optimizer_G_AB.step()
+                loss_G_AB_sum += loss_G_AB.item()
+                loss_feat_AB_sum += loss_feat_AB.item()
+            set_requires_grad(G_BA, True)
+
+            # Update G_BA (B -> A)
+            set_requires_grad(G_AB, False)
+            for _ in range(g_ba_steps):
+                optimizer_G_BA.zero_grad()
+
+                fake_A_img = G_BA(real_B)
+                recov_B = G_AB(fake_A_img)
+
+                loss_id_A = criterion_identity(G_BA(real_A), real_A)
+                loss_GAN_BA = criterion_GAN(D_A(fake_A_img), torch.ones_like(D_A(fake_A_img)) * real_label)
+                loss_cycle_BA = criterion_cycle(recov_B, real_B)
+                loss_feat_BA = feature_matching_loss(real_A, fake_A_img, D_A)
+
+                loss_G_BA = (lambda_identity * loss_id_A
+                        + lambda_GAN     * loss_GAN_BA
+                        + lambda_cycle   * loss_cycle_BA
+                        + lambda_feat    * loss_feat_BA)
+                loss_G_BA.backward()
+                nn.utils.clip_grad_norm_(G_BA.parameters(), max_norm=1.0)
+                optimizer_G_BA.step()
+                loss_G_BA_sum += loss_G_BA.item()
+                loss_feat_BA_sum += loss_feat_BA.item()
+            set_requires_grad(G_AB, True)
+
             loss_identity = (loss_id_A + loss_id_B) / 2
+            loss_GAN      = (loss_GAN_AB + loss_GAN_BA) / 2
+            loss_cycle    = (loss_cycle_AB + loss_cycle_BA) / 2
+            loss_feat     = real_A.new_tensor(
+                ((loss_feat_AB_sum / g_ab_steps) + (loss_feat_BA_sum / g_ba_steps)) / 2
+            )
+            loss_G        = real_A.new_tensor(
+                ((loss_G_AB_sum / g_ab_steps) + (loss_G_BA_sum / g_ba_steps)) / 2
+            )
 
-            loss_GAN_AB = criterion_GAN(D_B(fake_B_img), torch.ones_like(D_B(fake_B_img)) * real_label)
-            loss_GAN_BA = criterion_GAN(D_A(fake_A_img), torch.ones_like(D_A(fake_A_img)) * real_label)
-            loss_GAN    = (loss_GAN_AB + loss_GAN_BA) / 2
-
-            recov_A = G_BA(fake_B_img)
-            recov_B = G_AB(fake_A_img)
-            loss_cycle = (criterion_cycle(recov_A, real_A) + criterion_cycle(recov_B, real_B)) / 2
-
-            loss_feat_AB = feature_matching_loss(real_B, fake_B_img, D_B)
-            loss_feat_BA = feature_matching_loss(real_A, fake_A_img, D_A)
-            loss_feat = (loss_feat_AB + loss_feat_BA) / 2
-
-            loss_G = (lambda_identity * loss_identity
-                    + lambda_GAN     * loss_GAN
-                    + lambda_cycle   * loss_cycle
-                    + lambda_feat    * loss_feat)
-            loss_G.backward()
-            nn.utils.clip_grad_norm_(
-                list(G_AB.parameters()) + list(G_BA.parameters()), max_norm=1.0)
-            optimizer_G.step()
-
-        scheduler_G.step()
+        scheduler_G_AB.step()
+        scheduler_G_BA.step()
         scheduler_D_A.step()
         scheduler_D_B.step()
 
@@ -455,10 +492,12 @@ def main():
             #     'G_BA':        G_BA.state_dict(),
             #     'D_A':         D_A.state_dict(),
             #     'D_B':         D_B.state_dict(),
-            #     'opt_G':       optimizer_G.state_dict(),
+            #     'opt_G_AB':    optimizer_G_AB.state_dict(),
+            #     'opt_G_BA':    optimizer_G_BA.state_dict(),
             #     'opt_D_A':     optimizer_D_A.state_dict(),
             #     'opt_D_B':     optimizer_D_B.state_dict(),
-            #     'sched_G':     scheduler_G.state_dict(),
+            #     'sched_G_AB':  scheduler_G_AB.state_dict(),
+            #     'sched_G_BA':  scheduler_G_BA.state_dict(),
             #     'sched_D_A':   scheduler_D_A.state_dict(),
             #     'sched_D_B':   scheduler_D_B.state_dict(),
             # }
